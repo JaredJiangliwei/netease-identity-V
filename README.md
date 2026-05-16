@@ -27,3 +27,13 @@ Sustech-Digital-Image-Processing-Project/
 │       └── filters.py             # 4. 滤镜应用模块
 │
 └── .gitignore                     # Git 忽略规则文件（已自动忽略 node_modules、__pycache__ 等）
+
+## 🛠️ 启动前端界面
+
+#1.进入前端目录
+cd image-corrector-ui
+#2.安装所有依赖包
+npm install
+#3.启动本地开发服务器
+npm run dev
+启动成功后，在浏览器中打开终端输出的地址（通常为http://localhost:5173/或http://1ocalhost:5174/）即可进入工作台。
