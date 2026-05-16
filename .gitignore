@@ -1,0 +1,11 @@
+# 忽略前端依赖包（体积巨大，绝对不能传）
+node_modules/
+dist/
+.env
+
+# 忽略后端未来会产生的缓存和虚拟环境
+__pycache__/
+*.pyc
+.venv/
+venv/
+.vscode/
