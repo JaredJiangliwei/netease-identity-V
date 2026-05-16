@@ -28,8 +28,8 @@ Sustech-Digital-Image-Processing-Project/
 │
 └── .gitignore                     # Git 忽略规则文件（已自动忽略 node_modules、__pycache__ 等）
 
-## 🛠️ 启动前端界面
-
+##  启动前端界面
+```bash
 #1.进入前端目录
 cd image-corrector-ui
 #2.安装所有依赖包
