@@ -17,18 +17,53 @@ Sustech-Digital-Image-Processing-Project/
 │
 ├── image-processing-backend/       # 🐍 核心算法服务端 (Python 3 + FastAPI + OpenCV)
 │   ├── main.py                    # 后端服务启动总开关
+│   ├── requirements.txt           # 📦 环境依赖清单
 │   ├── api/
 │   │   └── image_routes.py        # 业务路由层：负责接收请求、Base64/OpenCV矩阵互转
 │   └── algorithms/                # 核心算法层：独立的图像处理功能模块
 │       ├── __init__.py
-│       ├── deskew.py              # 1. 歪斜校正模块
+│       ├── deskew.py              # 1. 歪斜校正模块 提供一个函数，输入输出都为numpy.ndarray格式
 │       ├── exposure.py            # 2. 曝光校正模块
 │       ├── sharpen.py             # 3. 图像增强与锐化模块
 │       └── filters.py             # 4. 滤镜应用模块
 │
 └── .gitignore                     # Git 忽略规则文件（已自动忽略 node_modules、__pycache__ 等）
 
+## 🚀 后端与算法环境配置 (Python)
+
+> **💡 说明**：请确保已安装 [Anaconda](https://www.anaconda.com/) 或 Miniconda。
+
+### 1. 创建并激活虚拟环境
+在终端执行以下命令：
+
+```bash
+# 创建 Python 3.9 隔离环境
+conda create -n sustech-dip python=3.9 -y
+
+# 激活环境
+conda activate sustech-dip
+
+### 2. 安装核心算法依赖
+在激活了 `(sustech-dip)` 环境的终端中执行：
+
+```bash
+# 进入后端目录
+cd image-processing-backend
+
+# 批量安装依赖
+pip install -r requirements.txt
+
+### 3. 启动后端算法服务器
+确保终端路径处于 `image-processing-backend/` 目录下：
+
+```bash
+# 启动后端服务
+python main.py
+
+
 ## 启动前端界面
+
+> **💡 说明**：请确保已安装 [Node.js](https://nodejs.org/)。前端需在新终端窗口中操作，无需与 Conda 环境关联。
 
 ```bash
 # 1. 进入前端目录
