@@ -73,7 +73,7 @@
           <div class="flex justify-between text-xs text-gray-500">
             <span>校正角度: {{ pipeline.deskew.angle }}°</span>
           </div>
-          <input type="range" min="-45" max45 v-model.number="pipeline.deskew.angle" @change="runPipeline" class="w-full" />
+          <input type="range" min="-45" max="45" v-model.number="pipeline.deskew.angle" @change="runPipeline" class="w-full" />
           <div class="flex items-center gap-2">
             <input type="checkbox" id="auto-deskew" v-model="pipeline.deskew.auto" @change="runPipeline" />
             <label id="auto-deskew" class="text-xs text-gray-600">开启智能自动裁切边缘</label>
@@ -137,6 +137,7 @@ import { ref, reactive } from 'vue';
 
 // --- DOM 引用 ---
 const fileInput = ref(null);
+const API_BASE_URL = 'http://127.0.0.1:8000/api';
 
 // --- 状态管理 ---
 const originImage = ref(null);  // 永远保存最初的用户原图
@@ -156,16 +157,15 @@ const triggerUpload = () => {
   fileInput.value.click();
 };
 
-const handleFileUpload = (event) => {
+const handleFileUpload = async (event) => {
   const file = event.target.files[0];
   if (!file) return;
 
-  // 使用 URL.createObjectURL 可以不经过后端，直接在前端生成一个本地预览链接
-  const objectUrl = URL.createObjectURL(file);
+  const imageDataUrl = await fileToDataUrl(file);
   
   // 1. 初始化原图与当前图
-  originImage.value = objectUrl;
-  currentImage.value = objectUrl;
+  originImage.value = imageDataUrl;
+  currentImage.value = imageDataUrl;
   
   // 2. 重置所有流水线开关
   resetPipelineConfig();
@@ -211,41 +211,47 @@ const runPipeline = async () => {
   }
 };
 
-// --- 模拟后端/算法同学的 API 接口（等你队友写好后换成真正的 axios.post） ---
-const callDeskewApi = async (image, angle, auto) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      console.log(`[API] 正在执行歪斜校正, 角度: ${angle}, 自动裁切: ${auto}`);
-      resolve(image); // 暂时返回原图，等队友提供接口后这里返回 response.data.image
-    }, 400); // 模拟400ms的网络与算法耗时
+// --- 后端 API 接口 ---
+const fileToDataUrl = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
   });
+};
+
+const postImageApi = async (path, payload) => {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    throw new Error(`接口请求失败: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.processedImage;
+};
+
+const callDeskewApi = async (image, angle, auto) => {
+  return postImageApi('/deskew', { image, angle, auto });
 };
 
 const callExposureApi = async (image, brightness) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      console.log(`[API] 正在执行曝光校正, 亮度偏移: ${brightness}`);
-      resolve(image);
-    }, 300);
-  });
+  return postImageApi('/exposure', { image, brightness });
 };
 
 const callSharpenApi = async (image, intensity) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      console.log(`[API] 正在执行锐化增强, 强度: ${intensity}%`);
-      resolve(image);
-    }, 300);
-  });
+  return postImageApi('/sharpen', { image, intensity });
 };
 
 const callFilterApi = async (image, filterType) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      console.log(`[API] 正在应用滤镜: ${filterType}`);
-      resolve(image);
-    }, 300);
-  });
+  return postImageApi('/filter', { image, filterType });
 };
 
 // --- 其他辅助操作 ---

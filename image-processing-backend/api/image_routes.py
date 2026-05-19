@@ -1,55 +1,85 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
-import cv2
-import numpy as np
 import base64
 
-# 🚀 关键：跨文件导入队友写的算法函数
-from algorithms.deskew import deskew 
-from algorithms.exposure import adjust_exposure  # 假设队友写了
+import cv2
+import numpy as np
+
+from algorithms.deskew import deskew
+from algorithms.exposure import adjust_exposure
 
 router = APIRouter(prefix="/api")
 
-# 定义前端传参的格式
-class ImageRequest(BaseModel):
-    image: str      # 前端传来的 base64
-    angle: float = 0.0
-    brightness: float = 0.0
 
-# --- 辅助工具函数：Base64 与 OpenCV 图片互转 ---
-def base64_to_cv2(b64_str):
+class ImageRequest(BaseModel):
+    image: str
+    angle: float = 0.0
+    auto: bool = True
+    brightness: float = 0.0
+    intensity: float = 0.0
+    filterType: str = "none"
+
+
+def base64_to_cv2(b64_str: str):
     if "," in b64_str:
-        b64_str = b64_str.split(",")[1] # 切掉前端的 "data:image/png;base64," 前缀
+        b64_str = b64_str.split(",", 1)[1]
     img_data = base64.b64decode(b64_str)
     img_array = np.frombuffer(img_data, np.uint8)
     return cv2.imdecode(img_array, cv2.IMREAD_COLOR)
 
+
 def cv2_to_base64(cv2_img):
-    _, buffer = cv2.imencode('.png', cv2.img)
-    b64_str = base64.b64encode(buffer).decode('utf-8')
-    return f"data:image/png;base64,{b64_str}" # 补上给前端直接显示的头
+    ok, buffer = cv2.imencode(".png", cv2_img)
+    if not ok:
+        raise ValueError("Failed to encode image")
+    b64_str = base64.b64encode(buffer).decode("utf-8")
+    return f"data:image/png;base64,{b64_str}"
 
-
-# --- 真正的 API 接口 ---
 
 @router.post("/deskew")
 async def handle_deskew(data: ImageRequest):
-    # 1. 转换图片
     cv_img = base64_to_cv2(data.image)
-    
-    # 2. 🚀 调用导入的单独 .py 中的算法函数
     processed_cv_img = deskew(cv_img)
-    
-    # 3. 转回 base64 返回给前端
-    result_b64 = cv2_to_base64(processed_cv_img)
-    return {"processedImage": result_b64}
+    return {"processedImage": cv2_to_base64(processed_cv_img)}
+
 
 @router.post("/exposure")
 async def handle_exposure(data: ImageRequest):
     cv_img = base64_to_cv2(data.image)
-    
-    # 🚀 调用另一个文件的算法函数
     processed_cv_img = adjust_exposure(cv_img, data.brightness)
-    
-    result_b64 = cv2_to_base64(processed_cv_img)
-    return {"processedImage": result_b64}
+    return {"processedImage": cv2_to_base64(processed_cv_img)}
+
+
+@router.post("/sharpen")
+async def handle_sharpen(data: ImageRequest):
+    cv_img = base64_to_cv2(data.image)
+    amount = max(0.0, min(float(data.intensity), 100.0)) / 100.0
+    blurred = cv2.GaussianBlur(cv_img, (0, 0), 3)
+    processed_cv_img = cv2.addWeighted(cv_img, 1 + amount, blurred, -amount, 0)
+    return {"processedImage": cv2_to_base64(processed_cv_img)}
+
+
+@router.post("/filter")
+async def handle_filter(data: ImageRequest):
+    cv_img = base64_to_cv2(data.image)
+    filter_type = data.filterType
+
+    if filter_type == "grayscale":
+        gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
+        processed_cv_img = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+    elif filter_type == "vintage":
+        kernel = np.array(
+            [
+                [0.272, 0.534, 0.131],
+                [0.349, 0.686, 0.168],
+                [0.393, 0.769, 0.189],
+            ]
+        )
+        processed_cv_img = cv2.transform(cv_img, kernel)
+        processed_cv_img = np.clip(processed_cv_img, 0, 255).astype(np.uint8)
+    elif filter_type == "high-contrast":
+        processed_cv_img = cv2.convertScaleAbs(cv_img, alpha=1.35, beta=8)
+    else:
+        processed_cv_img = cv_img
+
+    return {"processedImage": cv2_to_base64(processed_cv_img)}
