@@ -5,7 +5,7 @@ import numpy as np
 import base64
 
 # 🚀 关键：跨文件导入队友写的算法函数
-from algorithms.deskew import rotate_bound
+from algorithms.deskew import deskew 
 from algorithms.exposure import adjust_exposure  # 假设队友写了
 
 router = APIRouter(prefix="/api")
@@ -38,7 +38,7 @@ async def handle_deskew(data: ImageRequest):
     cv_img = base64_to_cv2(data.image)
     
     # 2. 🚀 调用导入的单独 .py 中的算法函数
-    processed_cv_img = rotate_bound(cv_img, data.angle)
+    processed_cv_img = deskew(cv_img)
     
     # 3. 转回 base64 返回给前端
     result_b64 = cv2_to_base64(processed_cv_img)
