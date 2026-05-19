@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 
 from algorithms.deskew import deskew
+from algorithms.enhance_sharpen import enhance_sharpen
 from algorithms.exposure import adjust_exposure
 
 router = APIRouter(prefix="/api")
@@ -17,6 +18,7 @@ class ImageRequest(BaseModel):
     auto: bool = True
     brightness: float = 0.0
     intensity: float = 0.0
+    sharpenMode: str = "unsharp"
     filterType: str = "none"
 
 
@@ -53,9 +55,11 @@ async def handle_exposure(data: ImageRequest):
 @router.post("/sharpen")
 async def handle_sharpen(data: ImageRequest):
     cv_img = base64_to_cv2(data.image)
-    amount = max(0.0, min(float(data.intensity), 100.0)) / 100.0
-    blurred = cv2.GaussianBlur(cv_img, (0, 0), 3)
-    processed_cv_img = cv2.addWeighted(cv_img, 1 + amount, blurred, -amount, 0)
+    processed_cv_img = enhance_sharpen(
+        cv_img,
+        strength=data.intensity,
+        mode=data.sharpenMode,
+    )
     return {"processedImage": cv2_to_base64(processed_cv_img)}
 
 
