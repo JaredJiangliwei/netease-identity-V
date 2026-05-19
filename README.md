@@ -1,4 +1,3 @@
-````markdown
 # 🎨 智能图像修复与校正工作台 (Sustech-Digital-Image-Processing-Project)
 
 一个基于前后端分离架构的数字图像处理与智能修复系统。前端提供直观的串行流水线交互，后端基于 FastAPI 驱动多模块核心图像处理算法，支持多步骤的可选智能协同修复。
@@ -94,4 +93,3 @@ npm run dev
 ```
 
 启动成功后，在浏览器中打开终端输出的地址（通常为 `http://localhost:5173/` 或 `http://localhost:5174/`）即可进入工作台。
-````
