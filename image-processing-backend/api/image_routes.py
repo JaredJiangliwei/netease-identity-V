@@ -20,7 +20,11 @@ class ImageRequest(BaseModel):
     image: str
     angle: float = 0.0
     auto: bool = True
-    brightness: float = 0.0
+    
+    gamma: float = 1.0
+    alpha: float = 1.0
+    beta: float = 0.0
+    
     intensity: float = 0.0
     sharpenMode: str = "unsharp"
     filterType: str = "none"
@@ -55,7 +59,12 @@ async def handle_deskew(data: ImageRequest):
 @router.post("/exposure")
 async def handle_exposure(data: ImageRequest):
     cv_img = base64_to_cv2(data.image)
-    processed_cv_img = adjust_exposure(cv_img, data.brightness)
+    processed_cv_img = adjust_exposure(
+        cv_img,
+        gamma=data.gamma,
+        alpha=data.alpha,
+        beta=data.beta
+    )
     return {"processedImage": cv2_to_base64(processed_cv_img)}
 
 
