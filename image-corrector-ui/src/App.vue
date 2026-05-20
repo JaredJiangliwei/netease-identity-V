@@ -195,7 +195,7 @@
             <span class="text-sm">5.</span> AI 滤镜
             <span class="text-xs font-normal text-purple-600">（需 GPU，单次较慢）</span>
           </label>
-          <input type="checkbox" v-model="aiPanel.expanded" :disabled="!originImage" class="w-4 h-4 text-purple-600" />
+          <input type="checkbox" v-model="aiPanel.expanded" @change="onAIToggle" :disabled="!originImage" class="w-4 h-4 text-purple-600" />
         </div>
         <div v-if="aiPanel.expanded" class="pt-2 border-t border-dashed space-y-2">
           <select v-model="aiPanel.style" class="w-full p-2 border rounded-lg text-sm bg-white">
@@ -252,6 +252,7 @@ const aiPanel = reactive({
   style: 'webtoon',
   strength: 0.6,
   seed: 42,
+  applied: false,  // 是否已经把 AI 效果应用到 currentImage 上
 });
 
 const AI_STYLE_OPTIONS = [
@@ -400,11 +401,20 @@ const runAIStyle = async () => {
       aiSeed: aiPanel.seed,
     });
     currentImage.value = result;
+    aiPanel.applied = true;
   } catch (error) {
     console.error('AI 风格化失败:', error);
     alert('AI 风格化失败。首次运行需下载约 7GB 模型，并请确认已装好 torch + diffusers（见 requirements-ai.txt）。');
   } finally {
     isLoading.value = false;
+  }
+};
+
+// 取消勾选 AI 滤镜时，如果之前应用过 AI，就回退到前 4 步的结果（重跑流水线）
+const onAIToggle = async () => {
+  if (!aiPanel.expanded && aiPanel.applied) {
+    aiPanel.applied = false;
+    await runPipeline();
   }
 };
 
@@ -424,6 +434,7 @@ const resetPipelineConfig = () => {
   aiPanel.style = 'webtoon';
   aiPanel.strength = 0.6;
   aiPanel.seed = 42;
+  aiPanel.applied = false;
 };
 
 const downloadResult = () => {
