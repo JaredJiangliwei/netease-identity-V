@@ -124,10 +124,47 @@
             <option value="grayscale">黑白文档</option>
             <option value="vintage">复古增强</option>
             <option value="high-contrast">高对比扫描</option>
+            <option value="negative">负片反相</option>
+            <option value="warm">暖色调</option>
+            <option value="cool">冷色调</option>
+            <option value="sketch">铅笔素描</option>
           </select>
         </div>
       </div>
-      
+
+      <div class="border rounded-xl p-4 bg-gray-50/50" :class="{ 'border-purple-500 bg-purple-50/10': aiPanel.expanded }">
+        <div class="flex justify-between items-center mb-3">
+          <label class="font-semibold flex items-center gap-2">
+            <span class="text-sm">5.</span> AI 滤镜
+            <span class="text-xs font-normal text-purple-600">（需 GPU，单次较慢）</span>
+          </label>
+          <input type="checkbox" v-model="aiPanel.expanded" :disabled="!originImage" class="w-4 h-4 text-purple-600" />
+        </div>
+        <div v-if="aiPanel.expanded" class="pt-2 border-t border-dashed space-y-2">
+          <select v-model="aiPanel.style" class="w-full p-2 border rounded-lg text-sm bg-white">
+            <option v-for="opt in AI_STYLE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+          </select>
+          <div>
+            <label class="block text-xs text-gray-600 mb-1">风格化强度：{{ aiPanel.strength.toFixed(2) }}</label>
+            <input type="range" min="0.30" max="0.90" step="0.02" v-model.number="aiPanel.strength" class="w-full" />
+          </div>
+          <div class="flex items-center gap-2">
+            <label class="text-xs text-gray-600">Seed：</label>
+            <input type="number" v-model.number="aiPanel.seed" class="flex-1 p-1 border rounded text-sm" />
+          </div>
+          <button
+            @click="runAIStyle"
+            :disabled="!currentImage || isLoading"
+            class="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition"
+          >
+            {{ isLoading ? '生成中...' : '应用 AI 风格化' }}
+          </button>
+          <p class="text-xs text-gray-500 leading-relaxed">
+            会基于"当前预览"图生成。先调好前 4 步再点上方按钮。GPU 上 ~1s/张，CPU 上 1-3 分钟。
+          </p>
+        </div>
+      </div>
+
     </div>
   </div>
 </template>
@@ -137,7 +174,7 @@ import { ref, reactive } from 'vue';
 
 // --- DOM 引用 ---
 const fileInput = ref(null);
-const API_BASE_URL = 'http://127.0.0.1:8000/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api';
 
 // --- 状态管理 ---
 const originImage = ref(null);  // 永远保存最初的用户原图
@@ -151,6 +188,30 @@ const pipeline = reactive({
   sharpen: { enabled: false, intensity: 0 },
   filter: { enabled: false, type: 'none' }
 });
+
+// AI 风格化（独立于自动流水线，需手动触发）
+const aiPanel = reactive({
+  expanded: false,
+  style: 'webtoon',
+  strength: 0.6,
+  seed: 42,
+});
+
+const AI_STYLE_OPTIONS = [
+  { value: 'webtoon',             label: 'Webtoon 漫画' },
+  { value: '3d_cartoon',          label: '3D 卡通' },
+  { value: 'manga_color',         label: '彩色漫画' },
+  { value: 'anime_key_visual',    label: '动漫海报' },
+  { value: 'anime_strong',        label: '强烈动漫' },
+  { value: 'comic_book',          label: '美式漫画' },
+  { value: 'watercolor',          label: '水彩画' },
+  { value: 'pastel_illustration', label: '柔色插画' },
+  { value: 'cyberpunk_anime',     label: '赛博朋克' },
+  { value: 'fantasy_storybook',   label: '童话风' },
+  { value: 'black_white_manga',   label: '黑白漫画' },
+  { value: 'oil_painting',        label: '油画' },
+  { value: 'lineart_flat_color',  label: '平涂线稿' },
+];
 
 // --- 上传逻辑 ---
 const triggerUpload = () => {
@@ -254,6 +315,25 @@ const callFilterApi = async (image, filterType) => {
   return postImageApi('/filter', { image, filterType });
 };
 
+const runAIStyle = async () => {
+  if (!currentImage.value) return;
+  isLoading.value = true;
+  try {
+    const result = await postImageApi('/ai-style', {
+      image: currentImage.value,
+      aiStyle: aiPanel.style,
+      aiStrength: aiPanel.strength,
+      aiSeed: aiPanel.seed,
+    });
+    currentImage.value = result;
+  } catch (error) {
+    console.error('AI 风格化失败:', error);
+    alert('AI 风格化失败。首次运行需下载约 7GB 模型，并请确认已装好 torch + diffusers（见 requirements-ai.txt）。');
+  } finally {
+    isLoading.value = false;
+  }
+};
+
 // --- 其他辅助操作 ---
 const resetEditor = () => {
   if (!originImage.value) return;
@@ -266,6 +346,10 @@ const resetPipelineConfig = () => {
   pipeline.exposure = { enabled: false, brightness: 0 };
   pipeline.sharpen = { enabled: false, intensity: 0 };
   pipeline.filter = { enabled: false, type: 'none' };
+  aiPanel.expanded = false;
+  aiPanel.style = 'webtoon';
+  aiPanel.strength = 0.6;
+  aiPanel.seed = 42;
 };
 
 const downloadResult = () => {

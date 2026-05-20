@@ -1,5 +1,7 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
+from typing import Optional
 import base64
 
 import cv2
@@ -8,6 +10,8 @@ import numpy as np
 from algorithms.deskew import deskew
 from algorithms.enhance_sharpen import enhance_sharpen
 from algorithms.exposure import adjust_exposure
+from algorithms.filters import apply_filter
+from algorithms.ai_style import apply_ai_style, list_styles
 
 router = APIRouter(prefix="/api")
 
@@ -20,6 +24,9 @@ class ImageRequest(BaseModel):
     intensity: float = 0.0
     sharpenMode: str = "unsharp"
     filterType: str = "none"
+    aiStyle: str = "none"
+    aiStrength: Optional[float] = None
+    aiSeed: int = 42
 
 
 def base64_to_cv2(b64_str: str):
@@ -66,24 +73,31 @@ async def handle_sharpen(data: ImageRequest):
 @router.post("/filter")
 async def handle_filter(data: ImageRequest):
     cv_img = base64_to_cv2(data.image)
-    filter_type = data.filterType
+    processed_cv_img = apply_filter(cv_img, data.filterType)
+    return {"processedImage": cv2_to_base64(processed_cv_img)}
 
-    if filter_type == "grayscale":
-        gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
-        processed_cv_img = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
-    elif filter_type == "vintage":
-        kernel = np.array(
-            [
-                [0.272, 0.534, 0.131],
-                [0.349, 0.686, 0.168],
-                [0.393, 0.769, 0.189],
-            ]
+
+@router.get("/ai-style/list")
+async def handle_list_ai_styles():
+    return {"styles": list_styles()}
+
+
+@router.post("/ai-style")
+async def handle_ai_style(data: ImageRequest):
+    if data.aiStyle in ("", "none"):
+        return {"processedImage": data.image}
+
+    cv_img = base64_to_cv2(data.image)
+    try:
+        processed_cv_img = await run_in_threadpool(
+            apply_ai_style,
+            cv_img,
+            data.aiStyle,
+            data.aiStrength,
+            data.aiSeed,
         )
-        processed_cv_img = cv2.transform(cv_img, kernel)
-        processed_cv_img = np.clip(processed_cv_img, 0, 255).astype(np.uint8)
-    elif filter_type == "high-contrast":
-        processed_cv_img = cv2.convertScaleAbs(cv_img, alpha=1.35, beta=8)
-    else:
-        processed_cv_img = cv_img
-
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     return {"processedImage": cv2_to_base64(processed_cv_img)}
