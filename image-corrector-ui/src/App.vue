@@ -89,10 +89,24 @@
           <input type="checkbox" v-model="pipeline.exposure.enabled" @change="runPipeline" :disabled="!originImage" class="w-4 h-4 text-blue-600" />
         </div>
         <div v-if="pipeline.exposure.enabled" class="space-y-3 pt-2 border-t border-dashed">
-          <div class="flex justify-between text-xs text-gray-500">
-            <span>亮度偏移: {{ pipeline.exposure.brightness }}</span>
+          <div>
+            <div class="flex justify-between text-xs text-gray-500">
+              <span>Gamma (中间调)</span><span>{{ pipeline.exposure.gamma.toFixed(2) }}</span>
+            </div>
+            <input type="range" min="0.1" max="3.0" step="0.05" v-model.number="pipeline.exposure.gamma" @change="runPipeline" class="w-full" />
           </div>
-          <input type="range" min="-100" max="100" v-model.number="pipeline.exposure.brightness" @change="runPipeline" class="w-full" />
+          <div>
+            <div class="flex justify-between text-xs text-gray-500">
+              <span>对比度 (alpha)</span><span>{{ pipeline.exposure.alpha.toFixed(2) }}</span>
+            </div>
+            <input type="range" min="0.5" max="2.5" step="0.05" v-model.number="pipeline.exposure.alpha" @change="runPipeline" class="w-full" />
+          </div>
+          <div>
+            <div class="flex justify-between text-xs text-gray-500">
+              <span>亮度偏移 (beta)</span><span>{{ pipeline.exposure.beta }}</span>
+            </div>
+            <input type="range" min="-100" max="100" step="1" v-model.number="pipeline.exposure.beta" @change="runPipeline" class="w-full" />
+          </div>
         </div>
       </div>
 
@@ -184,7 +198,7 @@ const isLoading = ref(false);   // 控制全局 Loading 状态
 // 完整的流水线参数配置
 const pipeline = reactive({
   deskew: { enabled: false, angle: 0, auto: true },
-  exposure: { enabled: false, brightness: 0 },
+  exposure: { enabled: false, gamma: 1.0, alpha: 1.0, beta: 0 },
   sharpen: { enabled: false, intensity: 0 },
   filter: { enabled: false, type: 'none' }
 });
@@ -250,7 +264,7 @@ const runPipeline = async () => {
 
     // 步骤 2: 曝光校正
     if (pipeline.exposure.enabled) {
-      tempImage = await callExposureApi(tempImage, pipeline.exposure.brightness);
+      tempImage = await callExposureApi(tempImage, pipeline.exposure.gamma, pipeline.exposure.alpha, pipeline.exposure.beta);
     }
 
     // 步骤 3: 增强/锐化
@@ -304,8 +318,8 @@ const callDeskewApi = async (image, angle, auto) => {
   return postImageApi('/deskew', { image, angle, auto });
 };
 
-const callExposureApi = async (image, brightness) => {
-  return postImageApi('/exposure', { image, brightness });
+const callExposureApi = async (image, gamma, alpha, beta) => {
+  return postImageApi('/exposure', { image, gamma, alpha, beta });
 };
 
 const callSharpenApi = async (image, intensity) => {
