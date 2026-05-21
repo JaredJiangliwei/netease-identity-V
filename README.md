@@ -100,7 +100,7 @@ npm run dev
 
 # 🤖 可选：启用 AI 风格化滤镜（步骤 5）
 
-> 💡 **说明**：AI 滤镜（webtoon / 动漫 / 油画 / 赛博朋克 等 13 种风格）基于 `stabilityai/sdxl-turbo` image-to-image 模型。**强烈建议在装有 NVIDIA GPU（≥8GB VRAM）的机器上运行**；CPU 也能跑但单张 1-3 分钟。前 4 步无需此功能即可正常使用，可跳过本节。
+> 💡 **说明**：AI 滤镜提供 3 种针对人像/合照精调的风格（webtoon / 3d_cartoon / cyberpunk_anime），基于 `stabilityai/sdxl-turbo` image-to-image 模型，并自动检测人数与男女呈现以动态拼接 prompt。**强烈建议在装有 NVIDIA GPU（≥8GB VRAM）的机器上运行**；CPU 也能跑但单张 1-3 分钟。前 4 步无需此功能即可正常使用，可跳过本节。
 
 ## 1. 安装匹配 CUDA 的 PyTorch
 
