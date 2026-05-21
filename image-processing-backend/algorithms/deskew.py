@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import math
 
 def deskew(image: np.ndarray) -> np.ndarray:
     """
@@ -108,3 +109,209 @@ def _order_points(pts: np.ndarray) -> np.ndarray:
     rect[3] = pts[np.argmax(diff)]
 
     return rect
+
+
+
+def rotate_image_with_crop(image, angle):
+    """
+    旋转图片并自动裁剪出最大的无空白矩形区域
+    
+    参数:
+        image: numpy.ndarray, 输入图像 (灰度图 shape=[H,W] 或 彩色图 shape=[H,W,C])
+        angle: float, 旋转角度（度°），顺时针为正
+    
+    返回:
+        rotated_cropped: numpy.ndarray, 旋转并裁剪后的图像，无空白区域
+    """
+    # 获取图像尺寸和通道数
+    if len(image.shape) == 2:
+        h, w = image.shape
+        channels = 1
+    else:
+        h, w, channels = image.shape
+    
+    # 将角度转换为弧度
+    angle_rad = math.radians(angle)
+    cos_a = abs(math.cos(angle_rad))
+    sin_a = abs(math.sin(angle_rad))
+    
+    # 计算旋转后能容纳的最大内接矩形尺寸
+    # 这是旋转后无空白区域的最大矩形
+    if w * sin_a <= h * cos_a:
+        new_w = w * cos_a - h * sin_a
+        new_h = h
+    else:
+        new_w = w
+        new_h = h * cos_a - w * sin_a
+    
+    new_w = max(1, int(new_w / (cos_a * cos_a - sin_a * sin_a)))
+    new_h = max(1, int(new_h / (cos_a * cos_a - sin_a * sin_a)))
+    
+    # 计算旋转后的完整画布尺寸
+    canvas_w = int(h * sin_a + w * cos_a)
+    canvas_h = int(h * cos_a + w * sin_a)
+    
+    # 创建旋转画布
+    if channels == 1:
+        rotated = np.zeros((canvas_h, canvas_w), dtype=image.dtype)
+    else:
+        rotated = np.zeros((canvas_h, canvas_w, channels), dtype=image.dtype)
+    
+    # 计算旋转中心
+    cx, cy = w / 2.0, h / 2.0
+    new_cx, new_cy = canvas_w / 2.0, canvas_h / 2.0
+    
+    # 反向映射：对于旋转后图像的每个像素，找到其在原图中的位置
+    cos_val = math.cos(angle_rad)
+    sin_val = math.sin(angle_rad)
+    
+    for i in range(canvas_h):
+        for j in range(canvas_w):
+            # 相对于旋转中心的坐标
+            x = j - new_cx
+            y = i - new_cy
+            
+            # 反向旋转到原图坐标
+            src_x = x * cos_val + y * sin_val + cx
+            src_y = -x * sin_val + y * cos_val + cy
+            
+            # 取整
+            src_x_int = int(round(src_x))
+            src_y_int = int(round(src_y))
+            
+            # 检查是否在原图范围内
+            if 0 <= src_x_int < w and 0 <= src_y_int < h:
+                if channels == 1:
+                    rotated[i, j] = image[src_y_int, src_x_int]
+                else:
+                    rotated[i, j] = image[src_y_int, src_x_int]
+    
+    # 裁剪出最大的内接矩形（无空白区域）
+    crop_x = (canvas_w - new_w) // 2
+    crop_y = (canvas_h - new_h) // 2
+    
+    if channels == 1:
+        cropped = rotated[crop_y:crop_y+new_h, crop_x:crop_x+new_w]
+    else:
+        cropped = rotated[crop_y:crop_y+new_h, crop_x:crop_x+new_w, :]
+    
+    return cropped
+
+def rotate_image_fast(image, angle):
+    """
+    快速版本：使用更简洁的方法计算并裁剪
+    
+    参数:
+        image: numpy.ndarray
+        angle: float, 旋转角度（度°）
+    
+    返回:
+        numpy.ndarray, 旋转并裁剪后的图像
+    """
+    h, w = image.shape[:2]
+    
+    # 角度转弧度
+    angle_rad = math.radians(angle)
+    cos_a = math.cos(angle_rad)
+    sin_a = math.sin(angle_rad)
+    
+    # 计算四个角点旋转后的位置
+    corners = np.array([
+        [0, 0],
+        [w, 0],
+        [w, h],
+        [0, h]
+    ])
+    
+    # 旋转矩阵
+    rot_matrix = np.array([
+        [cos_a, -sin_a],
+        [sin_a, cos_a]
+    ])
+    
+    # 旋转角点
+    rotated_corners = np.dot(corners, rot_matrix.T)
+    
+    # 计算旋转后图像的边界
+    min_x = np.min(rotated_corners[:, 0])
+    max_x = np.max(rotated_corners[:, 0])
+    min_y = np.min(rotated_corners[:, 1])
+    max_y = np.max(rotated_corners[:, 1])
+    
+    new_w = int(np.ceil(max_x - min_x))
+    new_h = int(np.ceil(max_y - min_y))
+    
+    # 创建新图像
+    if len(image.shape) == 2:
+        rotated = np.zeros((new_h, new_w), dtype=image.dtype)
+    else:
+        rotated = np.zeros((new_h, new_w, image.shape[2]), dtype=image.dtype)
+    
+    # 反向映射
+    for i in range(new_h):
+        for j in range(new_w):
+            # 转换到以旋转中心为原点的坐标系
+            x = j - new_w/2.0
+            y = i - new_h/2.0
+            
+            # 反向旋转
+            src_x = x * cos_a + y * sin_a + w/2.0
+            src_y = -x * sin_a + y * cos_a + h/2.0
+            
+            # 取最近邻
+            src_x_int = int(round(src_x))
+            src_y_int = int(round(src_y))
+            
+            if 0 <= src_x_int < w and 0 <= src_y_int < h:
+                if len(image.shape) == 2:
+                    rotated[i, j] = image[src_y_int, src_x_int]
+                else:
+                    rotated[i, j] = image[src_y_int, src_x_int]
+    
+    # 计算最大的内接矩形
+    inner_w = int(w * abs(cos_a) + h * abs(sin_a))
+    inner_h = int(h * abs(cos_a) + w * abs(sin_a))
+    
+    # 裁剪掉超出原始图像范围的部分
+    # 找到旋转后图像中完全由原图数据填充的最大矩形
+    mask = rotated > 0 if len(image.shape) == 2 else np.any(rotated > 0, axis=2)
+    
+    # 找到非零区域的边界
+    rows = np.any(mask, axis=1)
+    cols = np.any(mask, axis=0)
+    
+    if not np.any(rows) or not np.any(cols):
+        return rotated
+    
+    y_min, y_max = np.where(rows)[0][[0, -1]]
+    x_min, x_max = np.where(cols)[0][[0, -1]]
+    
+    # 返回裁剪后的图像
+    if len(image.shape) == 2:
+        return rotated[y_min:y_max+1, x_min:x_max+1]
+    else:
+        return rotated[y_min:y_max+1, x_min:x_max+1, :]
+
+
+# # 使用示例
+# if __name__ == '__main__':
+#     import matplotlib.pyplot as plt
+    
+    
+    
+#     # 旋转30度
+#     rotated_img = rotate_image_with_crop(img, 30)
+    
+#     # 显示结果
+#     plt.figure(figsize=(10, 5))
+#     plt.subplot(1, 2, 1)
+#     plt.imshow(img, cmap='gray' if len(img.shape) == 2 else None)
+#     plt.title('Original')
+#     plt.axis('off')
+    
+#     plt.subplot(1, 2, 2)
+#     plt.imshow(rotated_img, cmap='gray' if len(img.shape) == 2 else None)
+#     plt.title(f'Rotated & Cropped')
+#     plt.axis('off')
+    
+#     plt.show()

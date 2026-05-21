@@ -8,10 +8,12 @@ import cv2
 import numpy as np
 
 from algorithms.deskew import deskew
+from algorithms.rotate import rotate_image_without_borders
 from algorithms.enhance_sharpen import enhance_sharpen
 from algorithms.exposure import adjust_exposure
 from algorithms.filters import apply_filter
 from algorithms.ai_style import apply_ai_style, list_styles
+from algorithms.auto_rotate import auto_smart_deskew
 
 router = APIRouter(prefix="/api")
 
