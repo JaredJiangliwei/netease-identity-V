@@ -256,19 +256,9 @@ const aiPanel = reactive({
 });
 
 const AI_STYLE_OPTIONS = [
-  { value: 'webtoon',             label: 'Webtoon 漫画' },
-  { value: '3d_cartoon',          label: '3D 卡通' },
-  { value: 'manga_color',         label: '彩色漫画' },
-  { value: 'anime_key_visual',    label: '动漫海报' },
-  { value: 'anime_strong',        label: '强烈动漫' },
-  { value: 'comic_book',          label: '美式漫画' },
-  { value: 'watercolor',          label: '水彩画' },
-  { value: 'pastel_illustration', label: '柔色插画' },
-  { value: 'cyberpunk_anime',     label: '赛博朋克' },
-  { value: 'fantasy_storybook',   label: '童话风' },
-  { value: 'black_white_manga',   label: '黑白漫画' },
-  { value: 'oil_painting',        label: '油画' },
-  { value: 'lineart_flat_color',  label: '平涂线稿' },
+  { value: 'webtoon',         label: 'Webtoon 漫画' },
+  { value: '3d_cartoon',      label: '3D 卡通' },
+  { value: 'cyberpunk_anime', label: '赛博朋克' },
 ];
 
 // --- 上传逻辑 ---
