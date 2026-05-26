@@ -143,3 +143,70 @@ pip install -r requirements-ai.txt
 6. 本地重启 `npm run dev`，刷新浏览器，所有处理请求就走 Colab GPU 了
 
 > ⚠️ Colab 公网 URL 每次重启都会变，需重新更新 `.env.local`。Colab 免费版连续运行约 12 小时会自动断。
+
+---
+
+# 本地启动前后端联动
+
+下面命令适用于 Windows 本地开发，建议分别打开两个命令行窗口。
+
+## 1. 启动后端
+
+```bat
+cd /d K:\桌面\图像\project\image-processing-backend
+set HF_HUB_DISABLE_XET=1
+python -m uvicorn main:app --host 127.0.0.1 --port 8766
+```
+
+看到下面这行说明后端启动成功：
+
+```text
+Uvicorn running on http://127.0.0.1:8766
+```
+
+如果提示 `address already in use` 或 `WinError 10048`，说明端口已经被占用。可以先查看占用进程：
+
+```bat
+netstat -ano | findstr :8766
+```
+
+然后结束对应 PID，例如 PID 是 `29456`：
+
+```bat
+taskkill /PID 29456 /F
+```
+
+## 2. 启动前端
+
+另开一个命令行窗口：
+
+```bat
+cd /d K:\桌面\图像\project\image-corrector-ui
+npm install
+npm run dev
+```
+
+浏览器打开：
+
+```text
+http://localhost:5173
+```
+
+前端默认请求后端地址为：
+
+```text
+http://127.0.0.1:8766/api
+```
+
+如果后端端口改了，需要同步修改 `image-corrector-ui/src/App.vue` 里的 `API_BASE_URL`，或者使用 `.env.local` 配置 `VITE_API_BASE_URL`。
+
+## 3. AI 滤镜说明
+
+AI 滤镜使用本地真实 SDXL-Turbo 模型。模型下载完成后仍需要加载到内存和显卡中，首次点击会比较慢。推荐 NVIDIA 独显，并确保 C 盘有足够可用空间或虚拟内存。
+
+检查 PyTorch 和显卡是否可用：
+
+```bat
+cd /d K:\桌面\图像\project\image-processing-backend
+python -c "import torch; print(torch.__version__, torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+```

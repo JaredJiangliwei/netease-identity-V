@@ -9,3 +9,8 @@ __pycache__/
 .venv/
 venv/
 .vscode/
+.pip-cache/
+.pip-tmp/
+.model-offload/
+image-processing-backend/.model-offload/
+picture/

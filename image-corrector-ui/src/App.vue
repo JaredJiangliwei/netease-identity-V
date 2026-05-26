@@ -29,17 +29,35 @@
         </div>
       </div>
 
-      <div class="flex-1 flex items-center justify-center my-6 bg-gray-200 rounded-2xl border-2 border-dashed border-gray-300 relative overflow-hidden">
+      <div
+        class="flex-1 flex items-center justify-center my-6 bg-gray-200 rounded-2xl border-2 border-dashed border-gray-300 relative overflow-hidden"
+        :class="{ 'cursor-crosshair': watermarkPanel.enabled }"
+        @pointerdown="startWatermarkSelection"
+        @pointermove="updateWatermarkSelection"
+        @pointerup="finishWatermarkSelection"
+        @pointerleave="finishWatermarkSelection"
+      >
         <div v-if="isLoading" class="absolute inset-0 bg-black/50 z-10 flex flex-col items-center justify-center text-white gap-3">
           <div class="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
           <p class="text-sm font-medium">算法正在疯狂处理中...</p>
         </div>
 
-        <div v-if="currentImage" class="relative max-w-full max-h-[70vh] p-4">
-          <img :src="currentImage" alt="Preview" class="max-w-full max-h-[65vh] object-contain shadow-lg rounded" />
-          <span class="absolute bottom-6 right-6 bg-black/60 text-white text-xs px-2 py-1 rounded">
-            当前预览（已实时应用启用的算法）
+        <div v-if="currentImage" ref="previewStageRef" class="relative max-w-full max-h-[70vh] p-4 pt-10">
+          <span class="absolute top-1 right-4 bg-white/90 text-gray-700 text-xs px-2.5 py-1 rounded-full shadow-sm border border-gray-200">
+            {{ isComparingOriginal ? '原图预览' : '当前预览' }}
           </span>
+          <img
+            ref="previewImageRef"
+            :src="previewImage"
+            alt="Preview"
+            class="max-w-full max-h-[65vh] object-contain shadow-lg rounded select-none"
+            draggable="false"
+          />
+          <div
+            v-if="watermarkSelectionStyle"
+            class="absolute border-2 border-red-500 bg-red-500/15 pointer-events-none"
+            :style="watermarkSelectionStyle"
+          ></div>
         </div>
         
         <div v-else class="text-center text-gray-400">
@@ -49,6 +67,16 @@
       </div>
 
       <div class="flex justify-end bg-white p-4 rounded-xl shadow-sm">
+        <button
+          @pointerdown.prevent="startCompare"
+          @pointerup="stopCompare"
+          @pointerleave="stopCompare"
+          @pointercancel="stopCompare"
+          :disabled="!currentImage || isLoading"
+          class="mr-3 px-5 py-2.5 bg-gray-800 hover:bg-gray-900 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition"
+        >
+          按住查看原图
+        </button>
         <button 
           @click="downloadResult" 
           :disabled="!currentImage || isLoading"
@@ -222,21 +250,64 @@
         </div>
       </div>
 
+      <div class="border rounded-xl p-4 bg-gray-50/50" :class="{ 'border-red-500 bg-red-50/10': watermarkPanel.enabled }">
+        <div class="flex justify-between items-center mb-3">
+          <label class="font-semibold flex items-center gap-2">
+            <span class="text-sm">6.</span> 去除水印
+          </label>
+          <input type="checkbox" v-model="watermarkPanel.enabled" :disabled="!currentImage" class="w-4 h-4 text-red-600" />
+        </div>
+        <div v-if="watermarkPanel.enabled" class="pt-2 border-t border-dashed space-y-3">
+          <select v-model="watermarkPanel.type" class="w-full p-2 border rounded-lg text-sm bg-white">
+            <option value="white">浅色水印</option>
+            <option value="black">深色水印</option>
+          </select>
+          <input type="range" min="1" max="9" v-model.number="watermarkPanel.radius" class="w-full" />
+          <div class="text-xs text-gray-500">
+            修复半径：{{ watermarkPanel.radius }} · {{ watermarkPanel.rect ? '已框选区域' : '请在图片上拖拽框选水印' }}
+          </div>
+          <button
+            @click="runWatermarkRemove"
+            :disabled="!watermarkPanel.rect || isLoading"
+            class="w-full px-3 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition"
+          >
+            去除选区水印
+          </button>
+        </div>
+      </div>
+
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, reactive } from 'vue';
 
 // --- DOM 引用 ---
 const fileInput = ref(null);
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api';
+const previewStageRef = ref(null);
+const previewImageRef = ref(null);
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8766/api';
 
 // --- 状态管理 ---
 const originImage = ref(null);  // 永远保存最初的用户原图
 const currentImage = ref(null); // 画布上渲染的当前图片结果
 const isLoading = ref(false);   // 控制全局 Loading 状态
+const isComparingOriginal = ref(false);
+const previewImage = computed(() => {
+  return isComparingOriginal.value && originImage.value ? originImage.value : currentImage.value;
+});
+const watermarkSelectionStyle = computed(() => {
+  if (!watermarkPanel.rect || !previewImageRef.value || !previewStageRef.value) return null;
+  const imageRect = previewImageRef.value.getBoundingClientRect();
+  const stageRect = previewStageRef.value.getBoundingClientRect();
+  return {
+    left: `${watermarkPanel.rect.x * imageRect.width + imageRect.left - stageRect.left}px`,
+    top: `${watermarkPanel.rect.y * imageRect.height + imageRect.top - stageRect.top}px`,
+    width: `${watermarkPanel.rect.w * imageRect.width}px`,
+    height: `${watermarkPanel.rect.h * imageRect.height}px`,
+  };
+});
 
 // 完整的流水线参数配置
 const pipeline = reactive({
@@ -253,6 +324,16 @@ const aiPanel = reactive({
   strength: 0.6,
   seed: 42,
   applied: false,  // 是否已经把 AI 效果应用到 currentImage 上
+});
+
+const watermarkPanel = reactive({
+  enabled: false,
+  type: 'white',
+  radius: 3,
+  rect: null,
+  selecting: false,
+  startX: 0,
+  startY: 0,
 });
 
 const AI_STYLE_OPTIONS = [
@@ -278,7 +359,96 @@ const handleFileUpload = async (event) => {
   
   // 2. 重置所有流水线开关
   resetPipelineConfig();
+  stopCompare();
 };
+
+const startCompare = () => {
+  if (!originImage.value || !currentImage.value || isLoading.value) return;
+  isComparingOriginal.value = true;
+};
+
+const stopCompare = () => {
+  isComparingOriginal.value = false;
+};
+
+const handleCompareKeyDown = (event) => {
+  if (event.code !== 'Space' || event.repeat) return;
+  const target = event.target;
+  const isTyping = target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+  if (isTyping) return;
+  event.preventDefault();
+  startCompare();
+};
+
+const handleCompareKeyUp = (event) => {
+  if (event.code !== 'Space') return;
+  event.preventDefault();
+  stopCompare();
+};
+
+const getWatermarkPoint = (event) => {
+  if (!previewImageRef.value) return null;
+  const rect = previewImageRef.value.getBoundingClientRect();
+  const x = (event.clientX - rect.left) / rect.width;
+  const y = (event.clientY - rect.top) / rect.height;
+  if (x < 0 || x > 1 || y < 0 || y > 1) return null;
+  return {
+    x: Math.max(0, Math.min(1, x)),
+    y: Math.max(0, Math.min(1, y)),
+  };
+};
+
+const updateWatermarkRect = (point) => {
+  const x1 = Math.min(watermarkPanel.startX, point.x);
+  const y1 = Math.min(watermarkPanel.startY, point.y);
+  const x2 = Math.max(watermarkPanel.startX, point.x);
+  const y2 = Math.max(watermarkPanel.startY, point.y);
+  watermarkPanel.rect = {
+    x: x1,
+    y: y1,
+    w: x2 - x1,
+    h: y2 - y1,
+  };
+};
+
+const startWatermarkSelection = (event) => {
+  if (!watermarkPanel.enabled || isLoading.value || isComparingOriginal.value) return;
+  const point = getWatermarkPoint(event);
+  if (!point) return;
+  event.preventDefault();
+  watermarkPanel.selecting = true;
+  watermarkPanel.startX = point.x;
+  watermarkPanel.startY = point.y;
+  watermarkPanel.rect = { x: point.x, y: point.y, w: 0, h: 0 };
+};
+
+const updateWatermarkSelection = (event) => {
+  if (!watermarkPanel.selecting) return;
+  const point = getWatermarkPoint(event);
+  if (!point) return;
+  event.preventDefault();
+  updateWatermarkRect(point);
+};
+
+const finishWatermarkSelection = (event) => {
+  if (!watermarkPanel.selecting) return;
+  const point = getWatermarkPoint(event);
+  if (point) updateWatermarkRect(point);
+  watermarkPanel.selecting = false;
+  if (watermarkPanel.rect && (watermarkPanel.rect.w < 0.01 || watermarkPanel.rect.h < 0.01)) {
+    watermarkPanel.rect = null;
+  }
+};
+
+onMounted(() => {
+  window.addEventListener('keydown', handleCompareKeyDown);
+  window.addEventListener('keyup', handleCompareKeyUp);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleCompareKeyDown);
+  window.removeEventListener('keyup', handleCompareKeyUp);
+});
 
 // --- 核心流转逻辑（策略 A：单步串行驱动） ---
 const runPipeline = async () => {
@@ -376,8 +546,40 @@ const callSharpenApi = async (image, intensity) => {
   return postImageApi('/sharpen', { image, intensity });
 };
 
+const callWatermarkRemoveApi = async (image) => {
+  const rect = watermarkPanel.rect;
+  if (!rect || !previewImageRef.value) return image;
+  const imageElement = previewImageRef.value;
+  const naturalWidth = imageElement.naturalWidth || imageElement.width;
+  const naturalHeight = imageElement.naturalHeight || imageElement.height;
+  return postImageApi('/watermark-remove', {
+    image,
+    x: Math.round(rect.x * naturalWidth),
+    y: Math.round(rect.y * naturalHeight),
+    w: Math.round(rect.w * naturalWidth),
+    h: Math.round(rect.h * naturalHeight),
+    watermarkType: watermarkPanel.type,
+    radius: watermarkPanel.radius,
+  });
+};
+
 const callFilterApi = async (image, filterType) => {
   return postImageApi('/filter', { image, filterType });
+};
+
+const runWatermarkRemove = async () => {
+  if (!currentImage.value || !watermarkPanel.rect) return;
+  stopCompare();
+  isLoading.value = true;
+  try {
+    currentImage.value = await callWatermarkRemoveApi(currentImage.value);
+    watermarkPanel.rect = null;
+  } catch (error) {
+    console.error('去除水印失败:', error);
+    alert('去除水印失败，请重新框选水印区域或检查后端服务接口。');
+  } finally {
+    isLoading.value = false;
+  }
 };
 
 const runAIStyle = async () => {
@@ -413,6 +615,7 @@ const resetEditor = () => {
   if (!originImage.value) return;
   currentImage.value = originImage.value;
   resetPipelineConfig();
+  stopCompare();
 };
 
 const resetPipelineConfig = () => {
@@ -425,6 +628,11 @@ const resetPipelineConfig = () => {
   aiPanel.strength = 0.6;
   aiPanel.seed = 42;
   aiPanel.applied = false;
+  watermarkPanel.enabled = false;
+  watermarkPanel.type = 'white';
+  watermarkPanel.radius = 3;
+  watermarkPanel.rect = null;
+  watermarkPanel.selecting = false;
 };
 
 const downloadResult = () => {

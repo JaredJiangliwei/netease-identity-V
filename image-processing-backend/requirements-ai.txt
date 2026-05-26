@@ -11,8 +11,8 @@
 # 首次调用 /api/ai-style 时会从 HuggingFace 下载约 7GB 的 sdxl-turbo 权重。
 # 推荐 NVIDIA GPU + ≥8GB VRAM。CPU 也能跑，单张 1-3 分钟。
 
-diffusers>=0.27.0
+diffusers==0.35.2
 transformers>=4.39.0
 accelerate>=0.27.0
-safetensors>=0.4.0
+safetensors==0.6.2
 Pillow>=10.0.0

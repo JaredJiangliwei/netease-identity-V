@@ -17,6 +17,7 @@ CLIP 会在首次需要时懒加载；如果未安装 transformers，会自动�
 """
 from __future__ import annotations
 
+import os
 import threading
 
 import cv2
@@ -153,7 +154,8 @@ def _load_pipeline():
             return _pipe
         try:
             import torch
-            from diffusers import AutoPipelineForImage2Image
+            from diffusers import StableDiffusionXLImg2ImgPipeline
+            from huggingface_hub import snapshot_download
         except ImportError as e:
             _load_error = (
                 "AI style filter requires torch + diffusers. "
@@ -162,15 +164,50 @@ def _load_pipeline():
             raise RuntimeError(_load_error) from e
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        kwargs = {"use_safetensors": True}
+        kwargs = {
+            "use_safetensors": True,
+            "low_cpu_mem_usage": True,
+        }
         if device == "cuda":
             kwargs["torch_dtype"] = torch.float16
             kwargs["variant"] = "fp16"
         else:
             kwargs["torch_dtype"] = torch.float32
 
-        pipe = AutoPipelineForImage2Image.from_pretrained(_MODEL_ID, **kwargs)
-        pipe = pipe.to(device)
+        model_dir = snapshot_download(
+            _MODEL_ID,
+            local_files_only=True,
+            allow_patterns=[
+                "model_index.json",
+                "scheduler/*",
+                "tokenizer/*",
+                "tokenizer_2/*",
+                "text_encoder/config.json",
+                "text_encoder/model.fp16.safetensors",
+                "text_encoder_2/config.json",
+                "text_encoder_2/model.fp16.safetensors",
+                "unet/config.json",
+                "unet/diffusion_pytorch_model.fp16.safetensors",
+                "vae/config.json",
+                "vae/diffusion_pytorch_model.fp16.safetensors",
+            ],
+        )
+        model_dir = os.path.realpath(model_dir)
+
+        if device == "cuda":
+            offload_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".model-offload")
+            os.makedirs(offload_folder, exist_ok=True)
+            kwargs.update(
+                {
+                    "device_map": "balanced",
+                    "max_memory": {0: "6GiB", "cpu": "12GiB"},
+                    "offload_folder": offload_folder,
+                }
+            )
+
+        pipe = StableDiffusionXLImg2ImgPipeline.from_pretrained(model_dir, **kwargs)
+        if device != "cuda" or "device_map" not in kwargs:
+            pipe = pipe.to(device)
 
         if device == "cuda":
             try:

@@ -14,6 +14,7 @@ from algorithms.exposure import adjust_exposure
 from algorithms.filters import apply_filter
 from algorithms.ai_style import apply_ai_style, list_styles
 from algorithms.auto_rotate import auto_smart_deskew
+from algorithms.watermark_remove import remove_watermark_by_smart_rect
 
 router = APIRouter(prefix="/api")
 
@@ -33,6 +34,12 @@ class ImageRequest(BaseModel):
     aiStyle: str = "none"
     aiStrength: Optional[float] = None
     aiSeed: int = 42
+    x: int = 0
+    y: int = 0
+    w: int = 1
+    h: int = 1
+    watermarkType: str = "white"
+    radius: int = 3
 
 
 def base64_to_cv2(b64_str: str):
@@ -85,6 +92,21 @@ async def handle_sharpen(data: ImageRequest):
 async def handle_filter(data: ImageRequest):
     cv_img = base64_to_cv2(data.image)
     processed_cv_img = apply_filter(cv_img, data.filterType)
+    return {"processedImage": cv2_to_base64(processed_cv_img)}
+
+
+@router.post("/watermark-remove")
+async def handle_watermark_remove(data: ImageRequest):
+    cv_img = base64_to_cv2(data.image)
+    processed_cv_img = remove_watermark_by_smart_rect(
+        cv_img,
+        x=data.x,
+        y=data.y,
+        w=data.w,
+        h=data.h,
+        watermark_type=data.watermarkType,
+        radius=data.radius,
+    )
     return {"processedImage": cv2_to_base64(processed_cv_img)}
 
 
