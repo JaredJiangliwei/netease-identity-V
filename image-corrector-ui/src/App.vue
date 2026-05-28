@@ -102,6 +102,20 @@
             <input type="checkbox" id="auto-deskew" v-model="pipeline.deskew.auto" @change="runPipeline" />
             <label for="auto-deskew" class="text-xs text-gray-600">自动识别旋转角度</label>
           </div>
+          <div class="flex items-center gap-2">
+            <input type="checkbox" id="crop-deskew" v-model="pipeline.deskew.crop" @change="runPipeline" />
+            <label for="crop-deskew" class="text-xs text-gray-600">自动裁剪文档边缘</label>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="flex items-center gap-2 text-xs text-gray-600">
+              <input type="checkbox" v-model="pipeline.deskew.mirrorHorizontal" @change="runPipeline" />
+              水平镜像
+            </label>
+            <label class="flex items-center gap-2 text-xs text-gray-600">
+              <input type="checkbox" v-model="pipeline.deskew.mirrorVertical" @change="runPipeline" />
+              垂直镜像
+            </label>
+          </div>
           <div class="flex justify-between text-xs text-gray-500">
             <span v-if="pipeline.deskew.auto">
               识别角度: {{ pipeline.deskew.detectedAngle === null ? '等待检测' : `${pipeline.deskew.detectedAngle.toFixed(2)}°` }}
@@ -110,8 +124,8 @@
           </div>
           <input
             type="range"
-            min="-45"
-            max="45"
+            min="-180"
+            max="180"
             step="0.5"
             v-model.number="pipeline.deskew.angle"
             @change="runPipeline"
@@ -121,14 +135,14 @@
           <div class="flex gap-2">
             <button
               type="button"
-              @click="pipeline.deskew.angle = -90; pipeline.deskew.auto = false; runPipeline()"
+              @click="rotateByQuarterTurn(-90)"
               class="flex-1 px-2 py-1.5 text-xs bg-gray-200 hover:bg-gray-300 rounded"
             >
               左转90°
             </button>
             <button
               type="button"
-              @click="pipeline.deskew.angle = 90; pipeline.deskew.auto = false; runPipeline()"
+              @click="rotateByQuarterTurn(90)"
               class="flex-1 px-2 py-1.5 text-xs bg-gray-200 hover:bg-gray-300 rounded"
             >
               右转90°
@@ -217,6 +231,11 @@
           <input type="checkbox" v-model="pipeline.sharpen.enabled" @change="runPipeline" :disabled="!originImage" class="w-4 h-4 text-blue-600" />
         </div>
         <div v-if="pipeline.sharpen.enabled" class="space-y-3 pt-2 border-t border-dashed">
+          <select v-model="pipeline.sharpen.mode" @change="runPipeline" class="w-full p-2 border rounded-lg text-sm bg-white">
+            <option value="unsharp">Unsharp Masking（推荐）</option>
+            <option value="laplacian">Laplacian 边缘锐化</option>
+            <option value="sobel">Sobel 细节增强</option>
+          </select>
           <div class="flex justify-between text-xs text-gray-500">
             <span>锐化强度: {{ pipeline.sharpen.intensity }}%</span>
           </div>
@@ -290,9 +309,8 @@
             <option value="white">浅色水印</option>
             <option value="black">深色水印</option>
           </select>
-          <input type="range" min="1" max="9" v-model.number="watermarkPanel.radius" class="w-full" />
           <div class="text-xs text-gray-500">
-            修复半径：{{ watermarkPanel.radius }} · {{ watermarkPanel.rect ? '已框选区域' : '请在图片上拖拽框选水印' }}
+            {{ watermarkPanel.rect ? '已框选区域' : '请在图片上拖拽框选水印' }}
           </div>
           <button
             @click="runWatermarkRemove"
@@ -339,9 +357,17 @@ const watermarkSelectionStyle = computed(() => {
 
 // 完整的流水线参数配置
 const pipeline = reactive({
-  deskew: { enabled: false, angle: 0, auto: true, detectedAngle: null },
+  deskew: {
+    enabled: false,
+    angle: 0,
+    auto: true,
+    crop: false,
+    mirrorHorizontal: false,
+    mirrorVertical: false,
+    detectedAngle: null,
+  },
   exposure: { enabled: false, gamma: 1.0, alpha: 1.0, beta: 0 },
-  sharpen: { enabled: false, intensity: 0 },
+  sharpen: { enabled: false, intensity: 0, mode: 'unsharp' },
   filter: { enabled: false, type: 'none' }
 });
 
@@ -468,6 +494,18 @@ const finishWatermarkSelection = (event) => {
   }
 };
 
+const normalizeRotationAngle = (angle) => {
+  let normalized = ((angle + 180) % 360 + 360) % 360 - 180;
+  return normalized === -180 ? 180 : normalized;
+};
+
+const rotateByQuarterTurn = (delta) => {
+  if (!originImage.value || isLoading.value) return;
+  pipeline.deskew.auto = false;
+  pipeline.deskew.angle = normalizeRotationAngle(pipeline.deskew.angle + delta);
+  runPipeline();
+};
+
 onMounted(() => {
   window.addEventListener('keydown', handleCompareKeyDown);
   window.addEventListener('keyup', handleCompareKeyUp);
@@ -498,6 +536,16 @@ const runPipeline = async () => {
         pipeline.deskew.detectedAngle = null;
         tempImage = await callRotateApi(tempImage, pipeline.deskew.angle);
       }
+      if (pipeline.deskew.crop) {
+        tempImage = await callDeskewCropApi(tempImage);
+      }
+      if (pipeline.deskew.mirrorHorizontal || pipeline.deskew.mirrorVertical) {
+        tempImage = await callMirrorApi(
+          tempImage,
+          pipeline.deskew.mirrorHorizontal,
+          pipeline.deskew.mirrorVertical
+        );
+      }
     }
 
     // 步骤 2: 曝光校正
@@ -512,7 +560,11 @@ const runPipeline = async () => {
 
     // 步骤 3: 增强/锐化
     if (pipeline.sharpen.enabled) {
-      tempImage = await callSharpenApi(tempImage, pipeline.sharpen.intensity);
+      tempImage = await callSharpenApi(
+        tempImage,
+        pipeline.sharpen.intensity,
+        pipeline.sharpen.mode
+      );
     }
 
     // 步骤 4: 滤镜
@@ -569,6 +621,22 @@ const callAutoRotateApi = async (image) => {
   };
 };
 
+const callDeskewCropApi = async (image) => {
+  const data = await postImageApi('/deskew', { image });
+  return data.processedImage;
+};
+
+const callMirrorApi = async (image, mirrorHorizontal, mirrorVertical) => {
+  let mirrorMode = 'horizontal';
+  if (mirrorHorizontal && mirrorVertical) {
+    mirrorMode = 'both';
+  } else if (mirrorVertical) {
+    mirrorMode = 'vertical';
+  }
+  const data = await postImageApi('/mirror', { image, mirrorMode });
+  return data.processedImage;
+};
+
 const callExposureApi = async (
   image,
   gamma,
@@ -586,8 +654,8 @@ const callExposureApi = async (
 
 };
 
-const callSharpenApi = async (image, intensity) => {
-  const data = await postImageApi('/sharpen', { image, intensity });
+const callSharpenApi = async (image, intensity, sharpenMode) => {
+  const data = await postImageApi('/sharpen', { image, intensity, sharpenMode });
   return data.processedImage;
 };
 
@@ -666,9 +734,17 @@ const resetEditor = () => {
 };
 
 const resetPipelineConfig = () => {
-  pipeline.deskew = { enabled: false, angle: 0, auto: true, detectedAngle: null };
+  pipeline.deskew = {
+    enabled: false,
+    angle: 0,
+    auto: true,
+    crop: false,
+    mirrorHorizontal: false,
+    mirrorVertical: false,
+    detectedAngle: null,
+  };
   pipeline.exposure = { enabled: false, gamma: 1.0, alpha: 1.0, beta: 0 };
-  pipeline.sharpen = { enabled: false, intensity: 0 };
+  pipeline.sharpen = { enabled: false, intensity: 0, mode: 'unsharp' };
   pipeline.filter = { enabled: false, type: 'none' };
   aiPanel.expanded = false;
   aiPanel.style = 'webtoon';

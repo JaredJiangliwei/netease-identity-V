@@ -30,6 +30,7 @@ class ImageRequest(BaseModel):
     
     intensity: float = 0.0
     sharpenMode: str = "unsharp"
+    mirrorMode: str = "horizontal"
     filterType: str = "none"
     aiStyle: str = "none"
     aiStrength: Optional[float] = None
@@ -84,6 +85,20 @@ async def handle_auto_rotate(data: ImageRequest):
         "processedImage": cv2_to_base64(processed_cv_img),
         "angle": detected_angle,
     }
+
+
+@router.post("/mirror")
+async def handle_mirror(data: ImageRequest):
+    cv_img = base64_to_cv2(data.image)
+    if data.mirrorMode == "horizontal":
+        processed_cv_img = cv2.flip(cv_img, 1)
+    elif data.mirrorMode == "vertical":
+        processed_cv_img = cv2.flip(cv_img, 0)
+    elif data.mirrorMode == "both":
+        processed_cv_img = cv2.flip(cv_img, -1)
+    else:
+        raise HTTPException(status_code=400, detail="mirrorMode must be horizontal, vertical, or both")
+    return {"processedImage": cv2_to_base64(processed_cv_img)}
 
 
 @router.post("/exposure")
