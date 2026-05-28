@@ -98,13 +98,41 @@
           <input type="checkbox" v-model="pipeline.deskew.enabled" @change="runPipeline" :disabled="!originImage" class="w-4 h-4 text-blue-600" />
         </div>
         <div v-if="pipeline.deskew.enabled" class="space-y-3 pt-2 border-t border-dashed">
-          <div class="flex justify-between text-xs text-gray-500">
-            <span>校正角度: {{ pipeline.deskew.angle }}°</span>
-          </div>
-          <input type="range" min="-45" max="45" v-model.number="pipeline.deskew.angle" @change="runPipeline" class="w-full" />
           <div class="flex items-center gap-2">
             <input type="checkbox" id="auto-deskew" v-model="pipeline.deskew.auto" @change="runPipeline" />
-            <label id="auto-deskew" class="text-xs text-gray-600">开启智能自动裁切边缘</label>
+            <label for="auto-deskew" class="text-xs text-gray-600">自动识别旋转角度</label>
+          </div>
+          <div class="flex justify-between text-xs text-gray-500">
+            <span v-if="pipeline.deskew.auto">
+              识别角度: {{ pipeline.deskew.detectedAngle === null ? '等待检测' : `${pipeline.deskew.detectedAngle.toFixed(2)}°` }}
+            </span>
+            <span v-else>手动旋转: {{ pipeline.deskew.angle }}°</span>
+          </div>
+          <input
+            type="range"
+            min="-45"
+            max="45"
+            step="0.5"
+            v-model.number="pipeline.deskew.angle"
+            @change="runPipeline"
+            :disabled="pipeline.deskew.auto"
+            class="w-full disabled:opacity-40"
+          />
+          <div class="flex gap-2">
+            <button
+              type="button"
+              @click="pipeline.deskew.angle = -90; pipeline.deskew.auto = false; runPipeline()"
+              class="flex-1 px-2 py-1.5 text-xs bg-gray-200 hover:bg-gray-300 rounded"
+            >
+              左转90°
+            </button>
+            <button
+              type="button"
+              @click="pipeline.deskew.angle = 90; pipeline.deskew.auto = false; runPipeline()"
+              class="flex-1 px-2 py-1.5 text-xs bg-gray-200 hover:bg-gray-300 rounded"
+            >
+              右转90°
+            </button>
           </div>
         </div>
       </div>
@@ -311,7 +339,7 @@ const watermarkSelectionStyle = computed(() => {
 
 // 完整的流水线参数配置
 const pipeline = reactive({
-  deskew: { enabled: false, angle: 0, auto: true },
+  deskew: { enabled: false, angle: 0, auto: true, detectedAngle: null },
   exposure: { enabled: false, gamma: 1.0, alpha: 1.0, beta: 0 },
   sharpen: { enabled: false, intensity: 0 },
   filter: { enabled: false, type: 'none' }
@@ -462,7 +490,14 @@ const runPipeline = async () => {
 
     // 步骤 1: 歪斜校正
     if (pipeline.deskew.enabled) {
-      tempImage = await callDeskewApi(tempImage, pipeline.deskew.angle, pipeline.deskew.auto);
+      if (pipeline.deskew.auto) {
+        const result = await callAutoRotateApi(tempImage);
+        tempImage = result.processedImage;
+        pipeline.deskew.detectedAngle = result.angle;
+      } else {
+        pipeline.deskew.detectedAngle = null;
+        tempImage = await callRotateApi(tempImage, pipeline.deskew.angle);
+      }
     }
 
     // 步骤 2: 曝光校正
@@ -518,12 +553,20 @@ const postImageApi = async (path, payload) => {
     throw new Error(`接口请求失败: ${response.status}`);
   }
 
-  const data = await response.json();
+  return response.json();
+};
+
+const callRotateApi = async (image, angle) => {
+  const data = await postImageApi('/rotate', { image, angle });
   return data.processedImage;
 };
 
-const callDeskewApi = async (image, angle, auto) => {
-  return postImageApi('/deskew', { image, angle, auto });
+const callAutoRotateApi = async (image) => {
+  const data = await postImageApi('/auto-rotate', { image });
+  return {
+    processedImage: data.processedImage,
+    angle: Number(data.angle || 0),
+  };
 };
 
 const callExposureApi = async (
@@ -533,17 +576,19 @@ const callExposureApi = async (
   beta
 ) => {
 
-  return postImageApi('/exposure', {
+  const data = await postImageApi('/exposure', {
     image,
     gamma,
     alpha,
     beta
   });
+  return data.processedImage;
 
 };
 
 const callSharpenApi = async (image, intensity) => {
-  return postImageApi('/sharpen', { image, intensity });
+  const data = await postImageApi('/sharpen', { image, intensity });
+  return data.processedImage;
 };
 
 const callWatermarkRemoveApi = async (image) => {
@@ -552,7 +597,7 @@ const callWatermarkRemoveApi = async (image) => {
   const imageElement = previewImageRef.value;
   const naturalWidth = imageElement.naturalWidth || imageElement.width;
   const naturalHeight = imageElement.naturalHeight || imageElement.height;
-  return postImageApi('/watermark-remove', {
+  const data = await postImageApi('/watermark-remove', {
     image,
     x: Math.round(rect.x * naturalWidth),
     y: Math.round(rect.y * naturalHeight),
@@ -561,10 +606,12 @@ const callWatermarkRemoveApi = async (image) => {
     watermarkType: watermarkPanel.type,
     radius: watermarkPanel.radius,
   });
+  return data.processedImage;
 };
 
 const callFilterApi = async (image, filterType) => {
-  return postImageApi('/filter', { image, filterType });
+  const data = await postImageApi('/filter', { image, filterType });
+  return data.processedImage;
 };
 
 const runWatermarkRemove = async () => {
@@ -592,7 +639,7 @@ const runAIStyle = async () => {
       aiStrength: aiPanel.strength,
       aiSeed: aiPanel.seed,
     });
-    currentImage.value = result;
+    currentImage.value = result.processedImage;
     aiPanel.applied = true;
   } catch (error) {
     console.error('AI 风格化失败:', error);
@@ -619,7 +666,7 @@ const resetEditor = () => {
 };
 
 const resetPipelineConfig = () => {
-  pipeline.deskew = { enabled: false, angle: 0, auto: true };
+  pipeline.deskew = { enabled: false, angle: 0, auto: true, detectedAngle: null };
   pipeline.exposure = { enabled: false, gamma: 1.0, alpha: 1.0, beta: 0 };
   pipeline.sharpen = { enabled: false, intensity: 0 };
   pipeline.filter = { enabled: false, type: 'none' };
