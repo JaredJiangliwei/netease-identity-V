@@ -13,7 +13,7 @@ from algorithms.enhance_sharpen import enhance_sharpen
 from algorithms.exposure import adjust_exposure
 from algorithms.filters import apply_filter
 from algorithms.ai_style import apply_ai_style, list_styles
-from algorithms.auto_rotate import auto_smart_deskew
+from algorithms.auto_rotate import detect_skew_angle
 from algorithms.watermark_remove import remove_watermark_by_smart_rect
 
 router = APIRouter(prefix="/api")
@@ -63,6 +63,27 @@ async def handle_deskew(data: ImageRequest):
     cv_img = base64_to_cv2(data.image)
     processed_cv_img = deskew(cv_img)
     return {"processedImage": cv2_to_base64(processed_cv_img)}
+
+
+@router.post("/rotate")
+async def handle_rotate(data: ImageRequest):
+    cv_img = base64_to_cv2(data.image)
+    processed_cv_img = rotate_image_without_borders(cv_img, data.angle)
+    return {"processedImage": cv2_to_base64(processed_cv_img), "angle": data.angle}
+
+
+@router.post("/auto-rotate")
+async def handle_auto_rotate(data: ImageRequest):
+    cv_img = base64_to_cv2(data.image)
+    detected_angle = detect_skew_angle(cv_img)
+    if detected_angle == 0.0:
+        processed_cv_img = cv_img
+    else:
+        processed_cv_img = rotate_image_without_borders(cv_img, detected_angle)
+    return {
+        "processedImage": cv2_to_base64(processed_cv_img),
+        "angle": detected_angle,
+    }
 
 
 @router.post("/exposure")
