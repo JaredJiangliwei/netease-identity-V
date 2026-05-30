@@ -15,6 +15,7 @@ from algorithms.filters import apply_filter
 from algorithms.ai_style import apply_ai_style, list_styles
 from algorithms.auto_rotate import detect_skew_angle
 from algorithms.watermark_remove import remove_watermark_by_smart_rect
+from algorithms.wiener_deblur import auto_wiener_motion_deblur, wiener_motion_deblur
 
 router = APIRouter(prefix="/api")
 
@@ -31,6 +32,10 @@ class ImageRequest(BaseModel):
     intensity: float = 0.0
     sharpenMode: str = "unsharp"
     mirrorMode: str = "horizontal"
+    motionLength: int = 15
+    motionAngle: float = 0.0
+    noisePower: float = 0.01
+    wienerAuto: bool = True
     filterType: str = "none"
     aiStyle: str = "none"
     aiStrength: Optional[float] = None
@@ -122,6 +127,34 @@ async def handle_sharpen(data: ImageRequest):
         mode=data.sharpenMode,
     )
     return {"processedImage": cv2_to_base64(processed_cv_img)}
+
+
+@router.post("/wiener-deblur")
+async def handle_wiener_deblur(data: ImageRequest):
+    cv_img = base64_to_cv2(data.image)
+    if data.wienerAuto:
+        processed_cv_img, params = auto_wiener_motion_deblur(cv_img)
+        return {
+            "processedImage": cv2_to_base64(processed_cv_img),
+            "params": params,
+        }
+
+    processed_cv_img = wiener_motion_deblur(
+        cv_img,
+        length=data.motionLength,
+        angle=data.motionAngle,
+        noise=data.noisePower,
+        strength=0.72,
+        post_sharpen=0.12,
+    )
+    return {
+        "processedImage": cv2_to_base64(processed_cv_img),
+        "params": {
+            "length": data.motionLength,
+            "angle": data.motionAngle,
+            "noise": data.noisePower,
+        },
+    }
 
 
 @router.post("/filter")

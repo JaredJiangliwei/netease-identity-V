@@ -243,10 +243,50 @@
         </div>
       </div>
 
+      <div class="border rounded-xl p-4 bg-gray-50/50" :class="{ 'border-blue-500 bg-blue-50/10': pipeline.wiener.enabled }">
+        <div class="flex justify-between items-center mb-3">
+          <label class="font-semibold flex items-center gap-2">
+            <span class="text-sm">4.</span> 运动模糊修复
+          </label>
+          <input type="checkbox" v-model="pipeline.wiener.enabled" @change="runPipeline" :disabled="!originImage" class="w-4 h-4 text-blue-600" />
+        </div>
+        <div v-if="pipeline.wiener.enabled" class="space-y-3 pt-2 border-t border-dashed">
+          <label class="flex items-center gap-2 text-xs text-gray-600">
+            <input type="radio" value="auto" v-model="pipeline.wiener.mode" @change="runPipeline" />
+            自动修复（推荐）
+          </label>
+          <label class="flex items-center gap-2 text-xs text-gray-600">
+            <input type="radio" value="manual" v-model="pipeline.wiener.mode" @change="runPipeline" />
+            高级调参
+          </label>
+          <div v-if="pipeline.wiener.mode === 'auto'" class="text-xs text-gray-500 leading-relaxed">
+            {{ pipeline.wiener.autoResult || '自动尝试多组运动方向和长度，并选择较稳的修复结果。' }}
+          </div>
+          <div v-if="pipeline.wiener.mode === 'manual'">
+            <div class="flex justify-between text-xs text-gray-500">
+              <span>模糊长度: {{ pipeline.wiener.length }} px</span>
+            </div>
+            <input type="range" min="1" max="60" step="1" v-model.number="pipeline.wiener.length" @change="runPipeline" class="w-full" />
+          </div>
+          <div v-if="pipeline.wiener.mode === 'manual'">
+            <div class="flex justify-between text-xs text-gray-500">
+              <span>运动角度: {{ pipeline.wiener.angle }}°</span>
+            </div>
+            <input type="range" min="-180" max="180" step="1" v-model.number="pipeline.wiener.angle" @change="runPipeline" class="w-full" />
+          </div>
+          <div v-if="pipeline.wiener.mode === 'manual'">
+            <div class="flex justify-between text-xs text-gray-500">
+              <span>噪声抑制: {{ pipeline.wiener.noise.toFixed(3) }}</span>
+            </div>
+            <input type="range" min="0.001" max="0.080" step="0.001" v-model.number="pipeline.wiener.noise" @change="runPipeline" class="w-full" />
+          </div>
+        </div>
+      </div>
+
       <div class="border rounded-xl p-4 bg-gray-50/50" :class="{ 'border-blue-500 bg-blue-50/10': pipeline.filter.enabled }">
         <div class="flex justify-between items-center mb-3">
           <label class="font-semibold flex items-center gap-2">
-            <span class="text-sm">4.</span> 滤镜应用
+            <span class="text-sm">5.</span> 滤镜应用
           </label>
           <input type="checkbox" v-model="pipeline.filter.enabled" @change="runPipeline" :disabled="!originImage" class="w-4 h-4 text-blue-600" />
         </div>
@@ -267,7 +307,7 @@
       <div class="border rounded-xl p-4 bg-gray-50/50" :class="{ 'border-purple-500 bg-purple-50/10': aiPanel.expanded }">
         <div class="flex justify-between items-center mb-3">
           <label class="font-semibold flex items-center gap-2">
-            <span class="text-sm">5.</span> AI 滤镜
+            <span class="text-sm">6.</span> AI 滤镜
             <span class="text-xs font-normal text-purple-600">（需 GPU，单次较慢）</span>
           </label>
           <input type="checkbox" v-model="aiPanel.expanded" @change="onAIToggle" :disabled="!originImage" class="w-4 h-4 text-purple-600" />
@@ -300,7 +340,7 @@
       <div class="border rounded-xl p-4 bg-gray-50/50" :class="{ 'border-red-500 bg-red-50/10': watermarkPanel.enabled }">
         <div class="flex justify-between items-center mb-3">
           <label class="font-semibold flex items-center gap-2">
-            <span class="text-sm">6.</span> 去除水印
+            <span class="text-sm">7.</span> 去除水印
           </label>
           <input type="checkbox" v-model="watermarkPanel.enabled" :disabled="!currentImage" class="w-4 h-4 text-red-600" />
         </div>
@@ -368,6 +408,7 @@ const pipeline = reactive({
   },
   exposure: { enabled: false, gamma: 1.0, alpha: 1.0, beta: 0 },
   sharpen: { enabled: false, intensity: 0, mode: 'unsharp' },
+  wiener: { enabled: false, mode: 'auto', length: 15, angle: 0, noise: 0.01, autoResult: '' },
   filter: { enabled: false, type: 'none' }
 });
 
@@ -567,7 +608,27 @@ const runPipeline = async () => {
       );
     }
 
-    // 步骤 4: 滤镜
+    // 步骤 4: 维纳滤波去运动模糊
+    if (pipeline.wiener.enabled) {
+      const result = await callWienerDeblurApi(
+        tempImage,
+        pipeline.wiener.mode,
+        pipeline.wiener.length,
+        pipeline.wiener.angle,
+        pipeline.wiener.noise
+      );
+      tempImage = result.processedImage;
+      if (pipeline.wiener.mode === 'auto') {
+        const params = result.params || {};
+        pipeline.wiener.autoResult = params.length
+          ? `自动参数：长度 ${params.length}px，角度 ${Number(params.angle || 0).toFixed(0)}°`
+          : '未检测到明显运动模糊，已尽量保持原图。';
+      }
+    } else {
+      pipeline.wiener.autoResult = '';
+    }
+
+    // 步骤 5: 滤镜
     if (pipeline.filter.enabled) {
       tempImage = await callFilterApi(tempImage, pipeline.filter.type);
     }
@@ -659,6 +720,20 @@ const callSharpenApi = async (image, intensity, sharpenMode) => {
   return data.processedImage;
 };
 
+const callWienerDeblurApi = async (image, mode, motionLength, motionAngle, noisePower) => {
+  const data = await postImageApi('/wiener-deblur', {
+    image,
+    wienerAuto: mode === 'auto',
+    motionLength,
+    motionAngle,
+    noisePower,
+  });
+  return {
+    processedImage: data.processedImage,
+    params: data.params,
+  };
+};
+
 const callWatermarkRemoveApi = async (image) => {
   const rect = watermarkPanel.rect;
   if (!rect || !previewImageRef.value) return image;
@@ -745,6 +820,7 @@ const resetPipelineConfig = () => {
   };
   pipeline.exposure = { enabled: false, gamma: 1.0, alpha: 1.0, beta: 0 };
   pipeline.sharpen = { enabled: false, intensity: 0, mode: 'unsharp' };
+  pipeline.wiener = { enabled: false, mode: 'auto', length: 15, angle: 0, noise: 0.01, autoResult: '' };
   pipeline.filter = { enabled: false, type: 'none' };
   aiPanel.expanded = false;
   aiPanel.style = 'webtoon';
