@@ -16,6 +16,11 @@ from algorithms.ai_style import apply_ai_style, list_styles
 from algorithms.auto_rotate import detect_skew_angle
 from algorithms.watermark_remove import remove_watermark_by_smart_rect
 from algorithms.wiener_deblur import auto_wiener_motion_deblur, wiener_motion_deblur
+from algorithms.defocus_restore import (
+    DEFAULT_WEIGHTS as DEFOCUS_DEFAULT_WEIGHTS,
+    codeformer_available,
+    restore_with_weights,
+)
 
 router = APIRouter(prefix="/api")
 
@@ -47,6 +52,10 @@ class ImageRequest(BaseModel):
     h: int = 1
     watermarkType: str = "white"
     radius: int = 3
+    defocusWeights: Optional[list] = None
+    defocusUpscale: int = 2
+    defocusFaceUpsample: bool = True
+    defocusBgUpsampler: str = "realesrgan"
 
 
 def base64_to_cv2(b64_str: str):
@@ -178,6 +187,40 @@ async def handle_watermark_remove(data: ImageRequest):
         radius=data.radius,
     )
     return {"processedImage": cv2_to_base64(processed_cv_img)}
+
+
+@router.get("/defocus-restore/status")
+async def handle_defocus_status():
+    return {
+        "available": codeformer_available(),
+        "defaultWeights": list(DEFOCUS_DEFAULT_WEIGHTS),
+    }
+
+
+@router.post("/defocus-restore")
+async def handle_defocus_restore(data: ImageRequest):
+    cv_img = base64_to_cv2(data.image)
+    weights = data.defocusWeights or list(DEFOCUS_DEFAULT_WEIGHTS)
+    try:
+        results = await run_in_threadpool(
+            restore_with_weights,
+            cv_img,
+            weights,
+            data.defocusUpscale,
+            data.defocusFaceUpsample,
+            data.defocusBgUpsampler,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {
+        "results": [
+            {"weight": r["weight"], "image": cv2_to_base64(r["image"])}
+            for r in results
+        ]
+    }
 
 
 @router.get("/ai-style/list")

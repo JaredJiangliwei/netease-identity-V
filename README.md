@@ -124,6 +124,43 @@ pip install -r requirements-ai.txt
 
 ---
 
+# 🔍 可选：启用「失焦恢复」模块（CodeFormer 人脸修复）
+
+> 💡 **说明**：此模块基于腾讯 ARC 开源的 [CodeFormer](https://github.com/sczhou/CodeFormer)，针对模糊/低分辨率人脸做修复。`w` (fidelity weight) 控制画质 vs 保真的权衡，前端会对每个 `w` 各生成一张候选，让用户挑选满意的应用为新底图。**强烈建议 NVIDIA GPU**；CPU 也能跑但很慢。
+
+## 1. 把 CodeFormer 仓库 clone 到指定路径
+
+后端通过 subprocess 调用 CodeFormer 自带的 inference 脚本，需要先把它放到 `image-processing-backend/external/CodeFormer/`：
+
+```bash
+cd image-processing-backend
+mkdir -p external && cd external
+git clone https://github.com/sczhou/CodeFormer.git
+cd CodeFormer
+```
+
+## 2. 安装 CodeFormer 的依赖
+
+```bash
+# 装 CodeFormer 自家依赖
+pip install -r requirements.txt
+# 编译并安装 basicsr (CodeFormer 用的底层库)
+python basicsr/setup.py develop
+# 下载预训练权重(facelib + CodeFormer 主模型)
+python scripts/download_pretrained_models.py facelib
+python scripts/download_pretrained_models.py CodeFormer
+```
+
+> ⚠️ 如果遇到 `from torchvision.transforms.functional_tensor import rgb_to_grayscale` 报错，是因为新版 torchvision 把 `rgb_to_grayscale` 迁移了。手动把 `basicsr/data/degradations.py` 里那一行改成 `from torchvision.transforms.functional import rgb_to_grayscale`。
+
+## 3. 使用
+
+启动后端后，前端「7. 失焦恢复」面板可见。默认候选 `w = 0.3, 0.4, 0.5, 0.6`，可以自行修改成逗号分隔的若干 0~1 值。点击「生成候选」，等模型加载完成后会出现网格，点击任意候选即应用为当前底图。
+
+未安装 CodeFormer 时调用 `/api/defocus-restore` 会返回 503 + 安装指引；前端会把这段提示展示在面板里。
+
+---
+
 # ☁️ 没有本地 GPU？把后端跑在 Colab 上
 
 如果本机没 NVIDIA GPU，但你想体验"AI 滤镜"，可以**只把后端跑在 Colab 的免费 T4 上**，前端继续本地跑。

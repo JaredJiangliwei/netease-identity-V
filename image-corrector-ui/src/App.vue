@@ -46,7 +46,18 @@
           <span class="absolute top-1 right-4 bg-white/90 text-gray-700 text-xs px-2.5 py-1 rounded-full shadow-sm border border-gray-200">
             {{ isComparingOriginal ? '原图预览' : '当前预览' }}
           </span>
+          <canvas
+            v-if="brushPanel.enabled"
+            ref="brushCanvasRef"
+            class="max-w-full max-h-[65vh] object-contain shadow-lg rounded select-none cursor-crosshair"
+            @pointerdown.stop="onBrushDown"
+            @pointermove.stop="onBrushMove"
+            @pointerup.stop="onBrushUp"
+            @pointerleave.stop="onBrushUp"
+            @pointercancel.stop="onBrushUp"
+          ></canvas>
           <img
+            v-else
             ref="previewImageRef"
             :src="previewImage"
             alt="Preview"
@@ -54,7 +65,7 @@
             draggable="false"
           />
           <div
-            v-if="watermarkSelectionStyle"
+            v-if="watermarkSelectionStyle && !brushPanel.enabled"
             class="absolute border-2 border-red-500 bg-red-500/15 pointer-events-none"
             :style="watermarkSelectionStyle"
           ></div>
@@ -312,6 +323,9 @@
               <span>怀旧强度</span><span>{{ pipeline.filter.params.vintage.strength.toFixed(2) }}</span>
             </div>
             <input type="range" min="0" max="1.5" step="0.05" v-model.number="pipeline.filter.params.vintage.strength" @change="runPipeline" class="w-full" />
+            <div class="text-right pt-1">
+              <button type="button" @click="resetFilterParams('vintage')" class="text-xs text-gray-500 hover:text-blue-600 underline">↺ 恢复默认</button>
+            </div>
           </div>
 
           <!-- high-contrast -->
@@ -328,6 +342,9 @@
               </div>
               <input type="range" min="-50" max="50" step="1" v-model.number="pipeline.filter.params.highContrast.beta" @change="runPipeline" class="w-full" />
             </div>
+            <div class="text-right pt-1">
+              <button type="button" @click="resetFilterParams('highContrast')" class="text-xs text-gray-500 hover:text-blue-600 underline">↺ 恢复默认</button>
+            </div>
           </div>
 
           <!-- warm -->
@@ -336,6 +353,9 @@
               <span>暖度</span><span>{{ pipeline.filter.params.warm.strength.toFixed(2) }}</span>
             </div>
             <input type="range" min="0" max="2" step="0.05" v-model.number="pipeline.filter.params.warm.strength" @change="runPipeline" class="w-full" />
+            <div class="text-right pt-1">
+              <button type="button" @click="resetFilterParams('warm')" class="text-xs text-gray-500 hover:text-blue-600 underline">↺ 恢复默认</button>
+            </div>
           </div>
 
           <!-- cool -->
@@ -344,6 +364,9 @@
               <span>冷度</span><span>{{ pipeline.filter.params.cool.strength.toFixed(2) }}</span>
             </div>
             <input type="range" min="0" max="2" step="0.05" v-model.number="pipeline.filter.params.cool.strength" @change="runPipeline" class="w-full" />
+            <div class="text-right pt-1">
+              <button type="button" @click="resetFilterParams('cool')" class="text-xs text-gray-500 hover:text-blue-600 underline">↺ 恢复默认</button>
+            </div>
           </div>
 
           <!-- sketch -->
@@ -359,6 +382,9 @@
                 <span>线条强度</span><span>{{ pipeline.filter.params.sketch.strength.toFixed(2) }}</span>
               </div>
               <input type="range" min="0.3" max="1.6" step="0.02" v-model.number="pipeline.filter.params.sketch.strength" @change="runPipeline" class="w-full" />
+            </div>
+            <div class="text-right pt-1">
+              <button type="button" @click="resetFilterParams('sketch')" class="text-xs text-gray-500 hover:text-blue-600 underline">↺ 恢复默认</button>
             </div>
           </div>
 
@@ -380,6 +406,9 @@
               <input type="checkbox" v-model="pipeline.filter.params.emboss.mono" @change="runPipeline" />
               灰度输出
             </label>
+            <div class="text-right pt-1">
+              <button type="button" @click="resetFilterParams('emboss')" class="text-xs text-gray-500 hover:text-blue-600 underline">↺ 恢复默认</button>
+            </div>
           </div>
 
           <!-- mosaic -->
@@ -388,6 +417,9 @@
               <span>块大小 (像素)</span><span>{{ pipeline.filter.params.mosaic.block }}</span>
             </div>
             <input type="range" min="2" max="80" step="1" v-model.number="pipeline.filter.params.mosaic.block" @change="runPipeline" class="w-full" />
+            <div class="text-right pt-1">
+              <button type="button" @click="resetFilterParams('mosaic')" class="text-xs text-gray-500 hover:text-blue-600 underline">↺ 恢复默认</button>
+            </div>
           </div>
 
           <!-- vignette -->
@@ -418,6 +450,9 @@
                 <input type="range" min="0" max="1" step="0.02" v-model.number="pipeline.filter.params.vignette.centerY" @change="runPipeline" class="w-full" />
               </div>
             </div>
+            <div class="text-right pt-1">
+              <button type="button" @click="resetFilterParams('vignette')" class="text-xs text-gray-500 hover:text-blue-600 underline">↺ 恢复默认</button>
+            </div>
           </div>
 
           <!-- motion_blur -->
@@ -433,6 +468,9 @@
                 <span>方向 (度)</span><span>{{ pipeline.filter.params.motionBlur.angle }}°</span>
               </div>
               <input type="range" min="0" max="180" step="5" v-model.number="pipeline.filter.params.motionBlur.angle" @change="runPipeline" class="w-full" />
+            </div>
+            <div class="text-right pt-1">
+              <button type="button" @click="resetFilterParams('motionBlur')" class="text-xs text-gray-500 hover:text-blue-600 underline">↺ 恢复默认</button>
             </div>
           </div>
         </div>
@@ -471,12 +509,71 @@
         </div>
       </div>
 
+      <div class="border rounded-xl p-4 bg-gray-50/50" :class="{ 'border-amber-500 bg-amber-50/10': defocusPanel.expanded }">
+        <div class="flex justify-between items-center mb-3">
+          <label class="font-semibold flex items-center gap-2">
+            <span class="text-sm">7.</span> 失焦恢复
+            <span class="text-xs font-normal text-amber-600">（CodeFormer 人脸修复,需 GPU）</span>
+          </label>
+          <input type="checkbox" v-model="defocusPanel.expanded" :disabled="!originImage" class="w-4 h-4 text-amber-600" />
+        </div>
+        <div v-if="defocusPanel.expanded" class="pt-2 border-t border-dashed space-y-3">
+          <div class="text-xs text-gray-600 leading-relaxed">
+            CodeFormer 用不同 <code class="px-1 bg-gray-200 rounded text-[10px]">fidelity weight (w)</code> 生成多张候选,w 越小越激进、越清晰但易偏离原貌;w 越大越保真。生成后从下方网格里挑选满意的应用为新底图。
+          </div>
+          <div>
+            <label class="block text-xs text-gray-600 mb-1">候选 w 值(逗号分隔,0~1)</label>
+            <input type="text" v-model="defocusPanel.weightsText" placeholder="0.3, 0.4, 0.5, 0.6"
+                   class="w-full p-1.5 border rounded text-sm" />
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-xs text-gray-600 mb-1">放大倍数</label>
+              <select v-model.number="defocusPanel.upscale" class="w-full p-1.5 border rounded text-sm bg-white">
+                <option :value="1">1×</option>
+                <option :value="2">2×</option>
+                <option :value="4">4×</option>
+              </select>
+            </div>
+            <label class="flex items-center gap-2 text-xs text-gray-600 pt-5">
+              <input type="checkbox" v-model="defocusPanel.faceUpsample" />
+              人脸超分
+            </label>
+          </div>
+          <button
+            @click="runDefocusRestore"
+            :disabled="!currentImage || isLoading"
+            class="w-full px-3 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition"
+          >
+            {{ isLoading ? '生成中...' : '生成候选' }}
+          </button>
+          <p v-if="defocusPanel.error" class="text-xs text-red-600 leading-relaxed">{{ defocusPanel.error }}</p>
+
+          <div v-if="defocusPanel.results.length" class="space-y-2 pt-2 border-t border-dashed">
+            <div class="text-xs text-gray-700 font-medium">候选结果(点击应用):</div>
+            <div class="grid grid-cols-2 gap-2">
+              <div
+                v-for="r in defocusPanel.results"
+                :key="r.weight"
+                class="border rounded-lg p-1 cursor-pointer transition"
+                :class="defocusPanel.appliedWeight === r.weight ? 'border-amber-500 ring-2 ring-amber-300' : 'border-gray-200 hover:border-amber-400'"
+                @click="applyDefocusResult(r)"
+              >
+                <img :src="r.image" class="w-full rounded" alt="" />
+                <div class="text-[10px] text-center text-gray-600 mt-1">w = {{ r.weight }}</div>
+              </div>
+            </div>
+            <p class="text-[11px] text-gray-500">已应用 w = {{ defocusPanel.appliedWeight ?? '—' }}</p>
+          </div>
+        </div>
+      </div>
+
       <div class="border rounded-xl p-4 bg-gray-50/50" :class="{ 'border-red-500 bg-red-50/10': watermarkPanel.enabled }">
         <div class="flex justify-between items-center mb-3">
           <label class="font-semibold flex items-center gap-2">
-            <span class="text-sm">7.</span> 去除水印
+            <span class="text-sm">8.</span> 去除水印
           </label>
-          <input type="checkbox" v-model="watermarkPanel.enabled" :disabled="!currentImage" class="w-4 h-4 text-red-600" />
+          <input type="checkbox" v-model="watermarkPanel.enabled" @change="onWatermarkToggle" :disabled="!currentImage" class="w-4 h-4 text-red-600" />
         </div>
         <div v-if="watermarkPanel.enabled" class="pt-2 border-t border-dashed space-y-3">
           <select v-model="watermarkPanel.type" class="w-full p-2 border rounded-lg text-sm bg-white">
@@ -496,12 +593,56 @@
         </div>
       </div>
 
+      <div class="border rounded-xl p-4 bg-gray-50/50" :class="{ 'border-orange-500 bg-orange-50/10': brushPanel.enabled }">
+        <div class="flex justify-between items-center mb-3">
+          <label class="font-semibold flex items-center gap-2">
+            <span class="text-sm">9.</span> 涂抹打码 / 橡皮
+          </label>
+          <input type="checkbox" v-model="brushPanel.enabled" @change="onBrushToggle" :disabled="!currentImage" class="w-4 h-4 text-orange-600" />
+        </div>
+        <div v-if="brushPanel.enabled" class="pt-2 border-t border-dashed space-y-3">
+          <div class="flex gap-2">
+            <button
+              @click="brushPanel.tool = 'mosaic'"
+              :class="brushPanel.tool === 'mosaic' ? 'bg-orange-600 text-white' : 'bg-gray-200 text-gray-700'"
+              class="flex-1 py-1.5 rounded text-sm font-medium transition"
+            >🖌 打码</button>
+            <button
+              @click="brushPanel.tool = 'erase'"
+              :class="brushPanel.tool === 'erase' ? 'bg-orange-600 text-white' : 'bg-gray-200 text-gray-700'"
+              class="flex-1 py-1.5 rounded text-sm font-medium transition"
+            >🧽 橡皮</button>
+          </div>
+          <div>
+            <label class="flex justify-between text-xs text-gray-600 mb-1">
+              <span>笔刷半径(图像像素)</span><span>{{ brushPanel.radius }}</span>
+            </label>
+            <input type="range" min="5" max="200" step="1" v-model.number="brushPanel.radius" class="w-full" />
+          </div>
+          <div v-if="brushPanel.tool === 'mosaic'">
+            <label class="flex justify-between text-xs text-gray-600 mb-1">
+              <span>马赛克块大小</span><span>{{ brushPanel.block }}</span>
+            </label>
+            <input type="range" min="2" max="60" step="1" v-model.number="brushPanel.block" class="w-full" />
+          </div>
+          <div class="text-xs text-gray-500 leading-relaxed">
+            在左侧预览区<strong>按住鼠标拖动</strong>:打码模式刷出马赛克,橡皮模式将该圆形区域恢复为开启此模块时的底图。点「应用」后写入当前预览,可继续接其他步骤。
+          </div>
+          <div class="flex gap-2">
+            <button @click="resetBrush"
+              class="flex-1 px-3 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm font-medium transition">重置</button>
+            <button @click="applyBrush"
+              class="flex-1 px-3 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm font-medium transition">应用</button>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, reactive } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, reactive } from 'vue';
 
 // --- DOM 引用 ---
 const fileInput = ref(null);
@@ -560,6 +701,26 @@ const pipeline = reactive({
   }
 });
 
+// 每个滤镜的默认参数(也是「恢复默认」按钮的目标值)
+const FILTER_DEFAULTS = {
+  vintage:      { strength: 1.0 },
+  highContrast: { alpha: 1.35, beta: 8 },
+  warm:         { strength: 1.0 },
+  cool:         { strength: 1.0 },
+  sketch:       { blurKsize: 25, strength: 0.92 },
+  emboss:       { direction: 'NW', strength: 1.0, mono: true },
+  mosaic:       { block: 12 },
+  vignette:     { sigmaScale: 0.5, darkness: 0.85, centerX: 0.5, centerY: 0.5 },
+  motionBlur:   { ksize: 21, angle: 0 },
+};
+
+const resetFilterParams = (key) => {
+  const defaults = FILTER_DEFAULTS[key];
+  if (!defaults) return;
+  Object.assign(pipeline.filter.params[key], JSON.parse(JSON.stringify(defaults)));
+  runPipeline();
+};
+
 // 把当前选中的滤镜参数(camelCase)打包成发给后端的扁平对象
 const buildFilterParams = (type, params) => {
   switch (type) {
@@ -575,6 +736,170 @@ const buildFilterParams = (type, params) => {
     default:              return {};
   }
 };
+
+// 涂抹打码/橡皮(纯前端 Canvas,以鼠标为圆心刷区域)
+const brushCanvasRef = ref(null);
+let _brushOriginCanvas = null;  // 启用时刻的快照,橡皮从这里取像素
+const brushPanel = reactive({
+  enabled: false,
+  tool: 'mosaic',  // 'mosaic' | 'erase'
+  radius: 40,
+  block: 12,
+  drawing: false,
+});
+
+const onBrushToggle = async () => {
+  if (brushPanel.enabled) {
+    // 互斥:水印框选会用预览区的指针事件,冲突
+    watermarkPanel.enabled = false;
+    watermarkPanel.rect = null;
+    watermarkPanel.selecting = false;
+    await initBrushCanvas();
+  } else {
+    _brushOriginCanvas = null;
+  }
+};
+
+const onWatermarkToggle = () => {
+  if (watermarkPanel.enabled && brushPanel.enabled) {
+    brushPanel.enabled = false;
+    _brushOriginCanvas = null;
+  }
+};
+
+const initBrushCanvas = async () => {
+  if (!currentImage.value) return;
+  await nextTick();
+  const canvas = brushCanvasRef.value;
+  if (!canvas) return;
+  const img = new Image();
+  img.onload = () => {
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    canvas.getContext('2d').drawImage(img, 0, 0);
+    _brushOriginCanvas = document.createElement('canvas');
+    _brushOriginCanvas.width = img.naturalWidth;
+    _brushOriginCanvas.height = img.naturalHeight;
+    _brushOriginCanvas.getContext('2d').drawImage(img, 0, 0);
+  };
+  img.src = currentImage.value;
+};
+
+const brushCanvasCoords = (event) => {
+  const canvas = brushCanvasRef.value;
+  if (!canvas) return null;
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return null;
+  return {
+    x: ((event.clientX - rect.left) * canvas.width) / rect.width,
+    y: ((event.clientY - rect.top) * canvas.height) / rect.height,
+  };
+};
+
+const applyBrushAt = (cx, cy) => {
+  const canvas = brushCanvasRef.value;
+  if (!canvas || !_brushOriginCanvas) return;
+  const r = brushPanel.radius;
+  const block = Math.max(2, brushPanel.block | 0);
+  const x0 = Math.max(0, Math.floor(cx - r));
+  const y0 = Math.max(0, Math.floor(cy - r));
+  const x1 = Math.min(canvas.width, Math.ceil(cx + r));
+  const y1 = Math.min(canvas.height, Math.ceil(cy + r));
+  const w = x1 - x0;
+  const h = y1 - y0;
+  if (w <= 0 || h <= 0) return;
+
+  const ctx = canvas.getContext('2d');
+  const img = ctx.getImageData(x0, y0, w, h);
+  const data = img.data;
+  const r2 = r * r;
+
+  if (brushPanel.tool === 'mosaic') {
+    for (let by = 0; by < h; by += block) {
+      for (let bx = 0; bx < w; bx += block) {
+        const sx = Math.min(bx + (block >> 1), w - 1);
+        const sy = Math.min(by + (block >> 1), h - 1);
+        const si = (sy * w + sx) * 4;
+        const R = data[si], G = data[si + 1], B = data[si + 2];
+        const yEnd = Math.min(h, by + block);
+        const xEnd = Math.min(w, bx + block);
+        for (let dy = by; dy < yEnd; dy++) {
+          const py = y0 + dy;
+          const ddy = py - cy;
+          const ddy2 = ddy * ddy;
+          for (let dx = bx; dx < xEnd; dx++) {
+            const px = x0 + dx;
+            const ddx = px - cx;
+            if (ddx * ddx + ddy2 <= r2) {
+              const di = (dy * w + dx) * 4;
+              data[di] = R; data[di + 1] = G; data[di + 2] = B;
+            }
+          }
+        }
+      }
+    }
+  } else {
+    const origData = _brushOriginCanvas.getContext('2d').getImageData(x0, y0, w, h).data;
+    for (let dy = 0; dy < h; dy++) {
+      const py = y0 + dy;
+      const ddy = py - cy;
+      const ddy2 = ddy * ddy;
+      for (let dx = 0; dx < w; dx++) {
+        const px = x0 + dx;
+        const ddx = px - cx;
+        if (ddx * ddx + ddy2 <= r2) {
+          const i = (dy * w + dx) * 4;
+          data[i] = origData[i];
+          data[i + 1] = origData[i + 1];
+          data[i + 2] = origData[i + 2];
+          data[i + 3] = origData[i + 3];
+        }
+      }
+    }
+  }
+  ctx.putImageData(img, x0, y0);
+};
+
+const onBrushDown = (event) => {
+  if (!brushPanel.enabled) return;
+  brushPanel.drawing = true;
+  const p = brushCanvasCoords(event);
+  if (p) applyBrushAt(p.x, p.y);
+};
+
+const onBrushMove = (event) => {
+  if (!brushPanel.drawing) return;
+  const p = brushCanvasCoords(event);
+  if (p) applyBrushAt(p.x, p.y);
+};
+
+const onBrushUp = () => {
+  brushPanel.drawing = false;
+};
+
+const resetBrush = () => {
+  if (!_brushOriginCanvas || !brushCanvasRef.value) return;
+  brushCanvasRef.value.getContext('2d').drawImage(_brushOriginCanvas, 0, 0);
+};
+
+const applyBrush = () => {
+  const canvas = brushCanvasRef.value;
+  if (!canvas) return;
+  currentImage.value = canvas.toDataURL('image/png');
+  brushPanel.enabled = false;
+  _brushOriginCanvas = null;
+};
+
+// 失焦恢复(CodeFormer,独立于自动流水线,手动触发,返回多个候选)
+const defocusPanel = reactive({
+  expanded: false,
+  weightsText: '0.3, 0.4, 0.5, 0.6',
+  upscale: 2,
+  faceUpsample: true,
+  results: [],          // [{ weight: 0.3, image: 'data:...' }, ...]
+  appliedWeight: null,  // 当前选中应用的 w
+  error: '',
+});
 
 // AI 风格化（独立于自动流水线，需手动触发）
 const aiPanel = reactive({
@@ -937,6 +1262,50 @@ const runWatermarkRemove = async () => {
   }
 };
 
+const parseDefocusWeights = (text) => {
+  const arr = (text || '')
+    .split(/[,，\s]+/)
+    .map((s) => parseFloat(s))
+    .filter((n) => Number.isFinite(n) && n >= 0 && n <= 1);
+  return Array.from(new Set(arr.map((n) => Math.round(n * 100) / 100))).sort((a, b) => a - b);
+};
+
+const runDefocusRestore = async () => {
+  if (!currentImage.value) return;
+  defocusPanel.error = '';
+  const weights = parseDefocusWeights(defocusPanel.weightsText);
+  if (!weights.length) {
+    defocusPanel.error = '请填入至少一个 0~1 的 w 值,例如:0.3, 0.4, 0.5, 0.6';
+    return;
+  }
+  isLoading.value = true;
+  try {
+    const data = await postImageApi('/defocus-restore', {
+      image: currentImage.value,
+      defocusWeights: weights,
+      defocusUpscale: defocusPanel.upscale,
+      defocusFaceUpsample: defocusPanel.faceUpsample,
+    });
+    defocusPanel.results = (data.results || []).map((r) => ({
+      weight: r.weight,
+      image: r.image,
+    }));
+    defocusPanel.appliedWeight = null;
+  } catch (error) {
+    console.error('失焦恢复失败:', error);
+    const msg = error?.response?.data?.detail || error?.message || String(error);
+    defocusPanel.error = `失焦恢复失败:${msg}`;
+  } finally {
+    isLoading.value = false;
+  }
+};
+
+const applyDefocusResult = (item) => {
+  if (!item) return;
+  currentImage.value = item.image;
+  defocusPanel.appliedWeight = item.weight;
+};
+
 const runAIStyle = async () => {
   if (!currentImage.value) return;
   isLoading.value = true;
@@ -1006,11 +1375,24 @@ const resetPipelineConfig = () => {
   aiPanel.strength = 0.6;
   aiPanel.seed = 42;
   aiPanel.applied = false;
+  defocusPanel.expanded = false;
+  defocusPanel.weightsText = '0.3, 0.4, 0.5, 0.6';
+  defocusPanel.upscale = 2;
+  defocusPanel.faceUpsample = true;
+  defocusPanel.results = [];
+  defocusPanel.appliedWeight = null;
+  defocusPanel.error = '';
   watermarkPanel.enabled = false;
   watermarkPanel.type = 'white';
   watermarkPanel.radius = 3;
   watermarkPanel.rect = null;
   watermarkPanel.selecting = false;
+  brushPanel.enabled = false;
+  brushPanel.tool = 'mosaic';
+  brushPanel.radius = 40;
+  brushPanel.block = 12;
+  brushPanel.drawing = false;
+  _brushOriginCanvas = null;
 };
 
 const downloadResult = () => {
