@@ -290,17 +290,151 @@
           </label>
           <input type="checkbox" v-model="pipeline.filter.enabled" @change="runPipeline" :disabled="!originImage" class="w-4 h-4 text-blue-600" />
         </div>
-        <div v-if="pipeline.filter.enabled" class="pt-2 border-t border-dashed">
+        <div v-if="pipeline.filter.enabled" class="pt-2 border-t border-dashed space-y-3">
           <select v-model="pipeline.filter.type" @change="runPipeline" class="w-full p-2 border rounded-lg text-sm bg-white">
             <option value="none">原色模式</option>
             <option value="grayscale">黑白文档</option>
-            <option value="vintage">复古增强</option>
+            <option value="vintage">复古增强 (sepia)</option>
             <option value="high-contrast">高对比扫描</option>
             <option value="negative">负片反相</option>
             <option value="warm">暖色调</option>
             <option value="cool">冷色调</option>
             <option value="sketch">铅笔素描</option>
+            <option value="emboss">浮雕 (emboss)</option>
+            <option value="mosaic">马赛克 (mosaic)</option>
+            <option value="vignette">晕影 (vignette)</option>
+            <option value="motion_blur">运动模糊 (motion blur)</option>
           </select>
+
+          <!-- vintage / sepia -->
+          <div v-if="pipeline.filter.type === 'vintage'" class="space-y-1">
+            <div class="flex justify-between text-xs text-gray-600">
+              <span>怀旧强度</span><span>{{ pipeline.filter.params.vintage.strength.toFixed(2) }}</span>
+            </div>
+            <input type="range" min="0" max="1.5" step="0.05" v-model.number="pipeline.filter.params.vintage.strength" @change="runPipeline" class="w-full" />
+          </div>
+
+          <!-- high-contrast -->
+          <div v-if="pipeline.filter.type === 'high-contrast'" class="space-y-2">
+            <div class="space-y-1">
+              <div class="flex justify-between text-xs text-gray-600">
+                <span>对比度 alpha</span><span>{{ pipeline.filter.params.highContrast.alpha.toFixed(2) }}</span>
+              </div>
+              <input type="range" min="0.5" max="3.0" step="0.05" v-model.number="pipeline.filter.params.highContrast.alpha" @change="runPipeline" class="w-full" />
+            </div>
+            <div class="space-y-1">
+              <div class="flex justify-between text-xs text-gray-600">
+                <span>亮度 beta</span><span>{{ pipeline.filter.params.highContrast.beta }}</span>
+              </div>
+              <input type="range" min="-50" max="50" step="1" v-model.number="pipeline.filter.params.highContrast.beta" @change="runPipeline" class="w-full" />
+            </div>
+          </div>
+
+          <!-- warm -->
+          <div v-if="pipeline.filter.type === 'warm'" class="space-y-1">
+            <div class="flex justify-between text-xs text-gray-600">
+              <span>暖度</span><span>{{ pipeline.filter.params.warm.strength.toFixed(2) }}</span>
+            </div>
+            <input type="range" min="0" max="2" step="0.05" v-model.number="pipeline.filter.params.warm.strength" @change="runPipeline" class="w-full" />
+          </div>
+
+          <!-- cool -->
+          <div v-if="pipeline.filter.type === 'cool'" class="space-y-1">
+            <div class="flex justify-between text-xs text-gray-600">
+              <span>冷度</span><span>{{ pipeline.filter.params.cool.strength.toFixed(2) }}</span>
+            </div>
+            <input type="range" min="0" max="2" step="0.05" v-model.number="pipeline.filter.params.cool.strength" @change="runPipeline" class="w-full" />
+          </div>
+
+          <!-- sketch -->
+          <div v-if="pipeline.filter.type === 'sketch'" class="space-y-2">
+            <div class="space-y-1">
+              <div class="flex justify-between text-xs text-gray-600">
+                <span>模糊核大小</span><span>{{ pipeline.filter.params.sketch.blurKsize }}</span>
+              </div>
+              <input type="range" min="3" max="99" step="2" v-model.number="pipeline.filter.params.sketch.blurKsize" @change="runPipeline" class="w-full" />
+            </div>
+            <div class="space-y-1">
+              <div class="flex justify-between text-xs text-gray-600">
+                <span>线条强度</span><span>{{ pipeline.filter.params.sketch.strength.toFixed(2) }}</span>
+              </div>
+              <input type="range" min="0.3" max="1.6" step="0.02" v-model.number="pipeline.filter.params.sketch.strength" @change="runPipeline" class="w-full" />
+            </div>
+          </div>
+
+          <!-- emboss -->
+          <div v-if="pipeline.filter.type === 'emboss'" class="space-y-2">
+            <div class="space-y-1">
+              <span class="text-xs text-gray-600">光照方向</span>
+              <select v-model="pipeline.filter.params.emboss.direction" @change="runPipeline" class="w-full p-1.5 border rounded text-sm bg-white">
+                <option v-for="d in ['NW','N','NE','E','SE','S','SW','W']" :key="d" :value="d">{{ d }}</option>
+              </select>
+            </div>
+            <div class="space-y-1">
+              <div class="flex justify-between text-xs text-gray-600">
+                <span>强度</span><span>{{ pipeline.filter.params.emboss.strength.toFixed(2) }}</span>
+              </div>
+              <input type="range" min="0.2" max="3" step="0.1" v-model.number="pipeline.filter.params.emboss.strength" @change="runPipeline" class="w-full" />
+            </div>
+            <label class="flex items-center gap-2 text-xs text-gray-600">
+              <input type="checkbox" v-model="pipeline.filter.params.emboss.mono" @change="runPipeline" />
+              灰度输出
+            </label>
+          </div>
+
+          <!-- mosaic -->
+          <div v-if="pipeline.filter.type === 'mosaic'" class="space-y-1">
+            <div class="flex justify-between text-xs text-gray-600">
+              <span>块大小 (像素)</span><span>{{ pipeline.filter.params.mosaic.block }}</span>
+            </div>
+            <input type="range" min="2" max="80" step="1" v-model.number="pipeline.filter.params.mosaic.block" @change="runPipeline" class="w-full" />
+          </div>
+
+          <!-- vignette -->
+          <div v-if="pipeline.filter.type === 'vignette'" class="space-y-2">
+            <div class="space-y-1">
+              <div class="flex justify-between text-xs text-gray-600">
+                <span>亮区半径</span><span>{{ pipeline.filter.params.vignette.sigmaScale.toFixed(2) }}</span>
+              </div>
+              <input type="range" min="0.1" max="1.5" step="0.05" v-model.number="pipeline.filter.params.vignette.sigmaScale" @change="runPipeline" class="w-full" />
+            </div>
+            <div class="space-y-1">
+              <div class="flex justify-between text-xs text-gray-600">
+                <span>边角暗度</span><span>{{ pipeline.filter.params.vignette.darkness.toFixed(2) }}</span>
+              </div>
+              <input type="range" min="0" max="1" step="0.05" v-model.number="pipeline.filter.params.vignette.darkness" @change="runPipeline" class="w-full" />
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div class="space-y-1">
+                <div class="flex justify-between text-xs text-gray-600">
+                  <span>中心 X</span><span>{{ pipeline.filter.params.vignette.centerX.toFixed(2) }}</span>
+                </div>
+                <input type="range" min="0" max="1" step="0.02" v-model.number="pipeline.filter.params.vignette.centerX" @change="runPipeline" class="w-full" />
+              </div>
+              <div class="space-y-1">
+                <div class="flex justify-between text-xs text-gray-600">
+                  <span>中心 Y</span><span>{{ pipeline.filter.params.vignette.centerY.toFixed(2) }}</span>
+                </div>
+                <input type="range" min="0" max="1" step="0.02" v-model.number="pipeline.filter.params.vignette.centerY" @change="runPipeline" class="w-full" />
+              </div>
+            </div>
+          </div>
+
+          <!-- motion_blur -->
+          <div v-if="pipeline.filter.type === 'motion_blur'" class="space-y-2">
+            <div class="space-y-1">
+              <div class="flex justify-between text-xs text-gray-600">
+                <span>核长度</span><span>{{ pipeline.filter.params.motionBlur.ksize }}</span>
+              </div>
+              <input type="range" min="3" max="61" step="2" v-model.number="pipeline.filter.params.motionBlur.ksize" @change="runPipeline" class="w-full" />
+            </div>
+            <div class="space-y-1">
+              <div class="flex justify-between text-xs text-gray-600">
+                <span>方向 (度)</span><span>{{ pipeline.filter.params.motionBlur.angle }}°</span>
+              </div>
+              <input type="range" min="0" max="180" step="5" v-model.number="pipeline.filter.params.motionBlur.angle" @change="runPipeline" class="w-full" />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -409,8 +543,38 @@ const pipeline = reactive({
   exposure: { enabled: false, gamma: 1.0, alpha: 1.0, beta: 0 },
   sharpen: { enabled: false, intensity: 0, mode: 'unsharp' },
   wiener: { enabled: false, mode: 'auto', length: 15, angle: 0, noise: 0.01, autoResult: '' },
-  filter: { enabled: false, type: 'none' }
+  filter: {
+    enabled: false,
+    type: 'none',
+    params: {
+      vintage:      { strength: 1.0 },
+      highContrast: { alpha: 1.35, beta: 8 },
+      warm:         { strength: 1.0 },
+      cool:         { strength: 1.0 },
+      sketch:       { blurKsize: 25, strength: 0.92 },
+      emboss:       { direction: 'NW', strength: 1.0, mono: true },
+      mosaic:       { block: 12 },
+      vignette:     { sigmaScale: 0.5, darkness: 0.85, centerX: 0.5, centerY: 0.5 },
+      motionBlur:   { ksize: 21, angle: 0 },
+    },
+  }
 });
+
+// 把当前选中的滤镜参数(camelCase)打包成发给后端的扁平对象
+const buildFilterParams = (type, params) => {
+  switch (type) {
+    case 'vintage':       return { strength: params.vintage.strength };
+    case 'high-contrast': return { alpha: params.highContrast.alpha, beta: params.highContrast.beta };
+    case 'warm':          return { warmStrength: params.warm.strength };
+    case 'cool':          return { coolStrength: params.cool.strength };
+    case 'sketch':        return { blurKsize: params.sketch.blurKsize, sketchStrength: params.sketch.strength };
+    case 'emboss':        return { direction: params.emboss.direction, strength: params.emboss.strength, mono: params.emboss.mono };
+    case 'mosaic':        return { block: params.mosaic.block };
+    case 'vignette':      return { sigmaScale: params.vignette.sigmaScale, darkness: params.vignette.darkness, centerX: params.vignette.centerX, centerY: params.vignette.centerY };
+    case 'motion_blur':   return { ksize: params.motionBlur.ksize, angle: params.motionBlur.angle };
+    default:              return {};
+  }
+};
 
 // AI 风格化（独立于自动流水线，需手动触发）
 const aiPanel = reactive({
@@ -630,7 +794,8 @@ const runPipeline = async () => {
 
     // 步骤 5: 滤镜
     if (pipeline.filter.enabled) {
-      tempImage = await callFilterApi(tempImage, pipeline.filter.type);
+      const fParams = buildFilterParams(pipeline.filter.type, pipeline.filter.params);
+      tempImage = await callFilterApi(tempImage, pipeline.filter.type, fParams);
     }
 
     // 最终所有开启的步骤都跑完，更新到画布
@@ -752,8 +917,8 @@ const callWatermarkRemoveApi = async (image) => {
   return data.processedImage;
 };
 
-const callFilterApi = async (image, filterType) => {
-  const data = await postImageApi('/filter', { image, filterType });
+const callFilterApi = async (image, filterType, filterParams = {}) => {
+  const data = await postImageApi('/filter', { image, filterType, filterParams });
   return data.processedImage;
 };
 
@@ -821,7 +986,21 @@ const resetPipelineConfig = () => {
   pipeline.exposure = { enabled: false, gamma: 1.0, alpha: 1.0, beta: 0 };
   pipeline.sharpen = { enabled: false, intensity: 0, mode: 'unsharp' };
   pipeline.wiener = { enabled: false, mode: 'auto', length: 15, angle: 0, noise: 0.01, autoResult: '' };
-  pipeline.filter = { enabled: false, type: 'none' };
+  pipeline.filter = {
+    enabled: false,
+    type: 'none',
+    params: {
+      vintage:      { strength: 1.0 },
+      highContrast: { alpha: 1.35, beta: 8 },
+      warm:         { strength: 1.0 },
+      cool:         { strength: 1.0 },
+      sketch:       { blurKsize: 25, strength: 0.92 },
+      emboss:       { direction: 'NW', strength: 1.0, mono: true },
+      mosaic:       { block: 12 },
+      vignette:     { sigmaScale: 0.5, darkness: 0.85, centerX: 0.5, centerY: 0.5 },
+      motionBlur:   { ksize: 21, angle: 0 },
+    },
+  };
   aiPanel.expanded = false;
   aiPanel.style = 'webtoon';
   aiPanel.strength = 0.6;

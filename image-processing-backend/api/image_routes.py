@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Any, Dict
 import base64
 
 import cv2
@@ -37,6 +37,7 @@ class ImageRequest(BaseModel):
     noisePower: float = 0.01
     wienerAuto: bool = True
     filterType: str = "none"
+    filterParams: Optional[Dict[str, Any]] = None
     aiStyle: str = "none"
     aiStrength: Optional[float] = None
     aiSeed: int = 42
@@ -160,7 +161,7 @@ async def handle_wiener_deblur(data: ImageRequest):
 @router.post("/filter")
 async def handle_filter(data: ImageRequest):
     cv_img = base64_to_cv2(data.image)
-    processed_cv_img = apply_filter(cv_img, data.filterType)
+    processed_cv_img = apply_filter(cv_img, data.filterType, data.filterParams)
     return {"processedImage": cv2_to_base64(processed_cv_img)}
 
 
