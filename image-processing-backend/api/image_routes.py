@@ -21,6 +21,7 @@ from algorithms.defocus_restore import (
     codeformer_available,
     restore_with_weights,
 )
+from algorithms.background_remove import remove_background
 
 router = APIRouter(prefix="/api")
 
@@ -221,6 +222,13 @@ async def handle_defocus_restore(data: ImageRequest):
             for r in results
         ]
     }
+
+
+@router.post("/background-remove")
+async def handle_background_remove(data: ImageRequest):
+    cv_img = base64_to_cv2(data.image)
+    processed_cv_img = await run_in_threadpool(remove_background, cv_img)
+    return {"processedImage": cv2_to_base64(processed_cv_img)}
 
 
 @router.get("/ai-style/list")

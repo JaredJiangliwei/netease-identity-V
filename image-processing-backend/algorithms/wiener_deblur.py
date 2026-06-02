@@ -134,6 +134,27 @@ def _dering_luminance(original: np.ndarray, restored: np.ndarray, denoise: float
     return cv2.addWeighted(enhanced, 0.25, restored, 0.75, 0)
 
 
+def _suppress_deconvolution_ringing(
+    original: np.ndarray,
+    restored: np.ndarray,
+    psf: np.ndarray,
+    margin: int = 12,
+    amount: float = 0.85,
+) -> np.ndarray:
+    footprint = (psf > psf.max() * 0.05).astype(np.uint8)
+    if footprint.sum() <= 0:
+        footprint[psf.shape[0] // 2, psf.shape[1] // 2] = 1
+
+    local_min = cv2.erode(original, footprint)
+    local_max = cv2.dilate(original, footprint)
+    lower = np.maximum(local_min.astype(np.int16) - int(margin), 0)
+    upper = np.minimum(local_max.astype(np.int16) + int(margin), 255)
+    clipped = np.minimum(np.maximum(restored.astype(np.int16), lower), upper).astype(np.uint8)
+
+    amount = float(np.clip(amount, 0.0, 1.0))
+    return cv2.addWeighted(clipped, amount, restored, 1.0 - amount, 0)
+
+
 def clarity_restore(image: np.ndarray) -> np.ndarray:
     """
     Conservative non-blind clarity enhancement for mild defocus or low contrast.
@@ -207,6 +228,8 @@ def wiener_motion_deblur(
     strength: float = 0.72,
     post_sharpen: float = 0.12,
     dering: float = 5.0,
+    ringing_margin: int = 12,
+    ringing_amount: float = 0.85,
 ) -> np.ndarray:
     """
     Restore mild linear motion blur with Wiener deconvolution.
@@ -226,6 +249,14 @@ def wiener_motion_deblur(
 
     if image.ndim == 2:
         restored = _wiener_channel(image, psf, noise)
+        if ringing_margin > 0 and ringing_amount > 0:
+            restored = _suppress_deconvolution_ringing(
+                image,
+                restored,
+                psf,
+                margin=ringing_margin,
+                amount=ringing_amount,
+            )
         blended = cv2.addWeighted(restored, strength, image, 1.0 - strength, 0)
         if post_sharpen > 0:
             soft = cv2.GaussianBlur(blended, (0, 0), sigmaX=0.8)
@@ -236,6 +267,14 @@ def wiener_motion_deblur(
         ycrcb = cv2.cvtColor(image, cv2.COLOR_BGR2YCrCb)
         y, cr, cb = cv2.split(ycrcb)
         restored_y = _wiener_channel(y, psf, noise)
+        if ringing_margin > 0 and ringing_amount > 0:
+            restored_y = _suppress_deconvolution_ringing(
+                y,
+                restored_y,
+                psf,
+                margin=ringing_margin,
+                amount=ringing_amount,
+            )
         restored_y = cv2.addWeighted(restored_y, strength, y, 1.0 - strength, 0)
         if post_sharpen > 0:
             soft = cv2.GaussianBlur(restored_y, (0, 0), sigmaX=0.8)
@@ -290,11 +329,11 @@ def _candidate_score(input_image: np.ndarray, restored: np.ndarray, psf: np.ndar
     return (
         sharpness_reward
         - 2.2 * fidelity
-        - 0.22 * change
         - 900.0 * restored_saturated
         - 12000.0 * extra_saturated
         - 0.7 * excessive_sharpness
         - 35.0 * mean_shift
+        + 0.15 * min(change, 420.0)
     )
 
 
@@ -458,6 +497,8 @@ def auto_wiener_motion_deblur(image: np.ndarray) -> tuple[np.ndarray, dict]:
                         strength=strength,
                         post_sharpen=0.03,
                         dering=0.0,
+                        ringing_margin=0,
+                        ringing_amount=0.0,
                     )
                     score = score_candidate(work_img, candidate, _motion_psf(scaled_length, angle))
                     if low_detail:
@@ -520,20 +561,29 @@ def auto_wiener_motion_deblur(image: np.ndarray) -> tuple[np.ndarray, dict]:
             denoise=3.0,
         )
     else:
+        strict_deringing = low_detail and base_score < 14.0
+        if strict_deringing:
+            output_strength = min(float(best["strength"]), 0.65)
+        elif low_detail:
+            output_strength = float(best["strength"])
+        else:
+            output_strength = min(float(best["strength"]), 0.75)
         restored = wiener_motion_deblur(
             image,
             int(best["length"]),
             float(best["angle"]),
             float(best["noise"]),
-            strength=float(best["strength"]),
-            post_sharpen=0.015 if low_detail else 0.03,
-            dering=8.0 if low_detail else 5.0,
+            strength=output_strength,
+            post_sharpen=0.0 if strict_deringing else 0.015,
+            dering=10.0 if strict_deringing else 8.0,
+            ringing_margin=12 if strict_deringing else 12,
+            ringing_amount=0.85 if strict_deringing else 0.85,
         )
     return restored, {
         "length": int(best["length"]),
         "angle": float(best["angle"]),
         "noise": float(best["noise"]),
-        "strength": float(best["strength"]),
+        "strength": float(output_strength if best["method"] == "wiener" else best["strength"]),
         "method": best["method"],
         "iterations": int(best["iterations"]),
         "scoreGain": float(best["score"] - base_score),

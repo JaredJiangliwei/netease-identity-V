@@ -568,6 +568,26 @@
         </div>
       </div>
 
+      <div class="border rounded-xl p-4 bg-gray-50/50">
+        <div class="flex justify-between items-center mb-3">
+          <label class="font-semibold flex items-center gap-2">
+            <span class="text-sm">7.</span> 一键抠图
+          </label>
+        </div>
+        <div class="pt-2 border-t border-dashed space-y-3">
+          <button
+            @click="runBackgroundRemove"
+            :disabled="!currentImage || isLoading"
+            class="w-full px-3 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition"
+          >
+            {{ isLoading ? '抠图中...' : '一键抠图（透明背景）' }}
+          </button>
+          <p class="text-xs text-gray-500 leading-relaxed">
+            会基于当前预览图自动分离主体，并生成 PNG 透明背景。
+          </p>
+        </div>
+      </div>
+
       <div class="border rounded-xl p-4 bg-gray-50/50" :class="{ 'border-red-500 bg-red-50/10': watermarkPanel.enabled }">
         <div class="flex justify-between items-center mb-3">
           <label class="font-semibold flex items-center gap-2">
@@ -1242,9 +1262,28 @@ const callWatermarkRemoveApi = async (image) => {
   return data.processedImage;
 };
 
+const callBackgroundRemoveApi = async (image) => {
+  const data = await postImageApi('/background-remove', { image });
+  return data.processedImage;
+};
+
 const callFilterApi = async (image, filterType, filterParams = {}) => {
   const data = await postImageApi('/filter', { image, filterType, filterParams });
   return data.processedImage;
+};
+
+const runBackgroundRemove = async () => {
+  if (!currentImage.value) return;
+  stopCompare();
+  isLoading.value = true;
+  try {
+    currentImage.value = await callBackgroundRemoveApi(currentImage.value);
+  } catch (error) {
+    console.error('一键抠图失败:', error);
+    alert('一键抠图失败，请检查后端服务接口。');
+  } finally {
+    isLoading.value = false;
+  }
 };
 
 const runWatermarkRemove = async () => {
