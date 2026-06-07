@@ -1,249 +1,322 @@
-# 🎨 智能图像修复与校正工作台 (Sustech-Digital-Image-Processing-Project)
+# 智能图像修复与校正工作台
 
-一个基于前后端分离架构的数字图像处理与智能修复系统。前端提供直观的串行流水线交互，后端基于 FastAPI 驱动多模块核心图像处理算法，支持多步骤的可选智能协同修复。
+> 数字图像处理课程项目 — 基于前后端分离架构的交互式图像处理与智能修复系统
+
+本系统采用前后端分离设计：前端提供可视化的串行处理流水线，用户可逐步对图像应用多种处理；后端基于 FastAPI 封装一系列图像处理算法，既包含基于 OpenCV 的经典数字图像处理方法（几何校正、曝光校正、锐化增强、维纳反卷积、空间域滤镜、图像修复等），也集成了若干可选的深度学习模型（人脸修复、人像抠图、AI 风格化）。各处理模块相互独立、可按需启用，处理结果可在前端即时预览并作为下一步处理的输入。
 
 ---
 
-## 🛠️ 项目目录结构
+## 目录
+
+- [功能概览](#功能概览)
+- [技术栈](#技术栈)
+- [目录结构](#目录结构)
+- [环境要求](#环境要求)
+- [快速开始](#快速开始)
+  - [一、启动后端服务](#一启动后端服务)
+  - [二、启动前端界面](#二启动前端界面)
+- [可选功能](#可选功能)
+  - [AI 风格化滤镜](#ai-风格化滤镜sdxl-turbo)
+  - [失焦人脸恢复](#失焦人脸恢复codeformer)
+  - [将后端部署到 Colab](#将后端部署到-colab无本地-gpu-时)
+- [REST API 接口](#rest-api-接口)
+- [配置说明](#配置说明)
+- [常见问题](#常见问题)
+- [开源致谢](#开源致谢)
+
+---
+
+## 功能概览
+
+前端工作台将处理流程组织为一条串行流水线，按以下模块顺序排列。每个模块均可单独启用或跳过，处理结果会作为后续模块的输入图像。
+
+| 序号 | 模块 | 核心方法 | 说明 | 额外依赖 |
+| :--: | :--- | :--- | :--- | :--: |
+| 1 | 歪斜校正 | 透视变换、Canny 边缘检测、霍夫变换 | 自动检测最大四边形轮廓并透视展平；支持自动倾斜检测、任意角度无黑边旋转、镜像与裁剪 | 无 |
+| 2 | 曝光校正 | Gamma 校正、线性亮度/对比度调整 | 调整图像整体明暗与对比度 | 无 |
+| 3 | 图像增强与锐化 | 非锐化掩蔽、Laplacian、Sobel | 仅在亮度通道上处理以避免色彩失真 | 无 |
+| 4 | 运动模糊修复 | 维纳反卷积（Wiener Deconvolution） | 支持自动估计点扩散函数，或手动指定模糊长度、角度与噪声功率 | 无 |
+| 5 | 滤镜应用 | 空间域滤镜 | 提供灰度、反色、复古、暖色、冷色、素描、高对比、浮雕、马赛克、暗角、运动模糊共 11 种可参数化滤镜 | 无 |
+| 6 | AI 滤镜 | SDXL-Turbo 图生图 | 提供 3 种人像风格（webtoon / 3d_cartoon / cyberpunk_anime），自动检测人数与性别呈现以动态构造提示词 | torch 等（可选） |
+| 7 | 失焦恢复 | CodeFormer 人脸修复 | 针对模糊、低分辨率人脸做修复，可按不同保真权重生成多张候选供选择 | CodeFormer（可选） |
+| 8 | 一键抠图 | U²-Net 人像分割（rembg） | 自动分离人像与背景，输出透明背景图 | 无（已含 rembg） |
+| 9 | 去除水印 | 图像修复（Inpainting，Telea / Navier-Stokes） | 框选矩形区域后基于邻域信息修复，支持浅色/深色水印 | 无 |
+| 10 | 涂抹打码 | 交互式画笔 | 前端画笔工具，手动涂抹局部马赛克或擦除，可调笔刷半径 | 无 |
+
+> 模块 1–5、8–10 仅依赖基础环境即可运行；模块 6、7 依赖额外的深度学习库与预训练权重，属于可选增强功能，未安装时不影响其余模块的正常使用。
+
+---
+
+## 技术栈
+
+**前端**
+
+- Vue 3（Composition API）
+- Vite 构建工具
+- Tailwind CSS
+- 原生 Fetch API 进行前后端通信
+
+**后端**
+
+- Python 3.9
+- FastAPI + Uvicorn（异步 Web 框架与 ASGI 服务器）
+- OpenCV、NumPy（核心图像处理）
+- rembg + ONNX Runtime（人像分割）
+- 可选：PyTorch、diffusers、transformers（AI 风格化）
+- 可选：CodeFormer、BasicSR（人脸修复）
+
+前后端通过 RESTful 接口交互，图像以 Base64 编码的 PNG 在 JSON 中传输。
+
+---
+
+## 目录结构
 
 ```text
-Sustech-Digital-Image-Processing-Project/
+netease-identity-V/
 │
-├── image-corrector-ui/            # 💻 前端生产力工作台 (Vue 3 + Tailwind CSS + Axios)
+├── image-corrector-ui/                 # 前端工作台 (Vue 3 + Vite + Tailwind CSS)
 │   ├── src/
-│   │   ├── App.vue                # 核心页面与流水线调度逻辑
-│   │   ├── main.js                # 前端主入口
-│   │   └── style.css              # Tailwind CSS 样式配置
+│   │   ├── App.vue                     # 主页面与流水线调度逻辑
+│   │   ├── main.js                     # 前端入口
+│   │   ├── style.css                   # 全局样式
+│   │   ├── assets/
+│   │   └── components/
 │   ├── index.html
-│   └── package.json
+│   ├── vite.config.js
+│   ├── tailwind.config.js
+│   ├── package.json
+│   └── .env.local.example              # 后端地址配置示例
 │
-├── image-processing-backend/      # 🐍 核心算法服务端 (Python 3 + FastAPI + OpenCV)
-│   ├── main.py                    # 后端服务启动总开关
-│   ├── requirements.txt           # 📦 基础依赖清单（OpenCV 滤镜可用）
-│   ├── requirements-ai.txt        # 📦 AI 风格化的额外依赖（torch/diffusers，可选）
+├── image-processing-backend/           # 后端算法服务 (Python + FastAPI)
+│   ├── main.py                         # 服务入口（注册路由、配置跨域）
+│   ├── requirements.txt                # 基础依赖
+│   ├── requirements-ai.txt             # AI 风格化的额外依赖（可选）
 │   ├── api/
-│   │   └── image_routes.py        # 业务路由层：负责接收请求、Base64/OpenCV矩阵互转
-│   └── algorithms/                # 核心算法层：独立的图像处理功能模块
-│       ├── __init__.py
-│       ├── deskew.py              # 1. 歪斜校正模块（输入输出均为 numpy.ndarray）
-│       ├── exposure.py            # 2. 曝光校正模块
-│       ├── enhance_sharpen.py     # 3. 图像增强与锐化模块
-│       ├── filters.py             # 4. 滤镜应用模块
-│       └── ai_style.py            # 5. AI 风格化模块（SDXL-Turbo image2image，需 GPU）
+│   │   └── image_routes.py             # 路由层：请求解析、Base64 与图像矩阵互转
+│   └── algorithms/                     # 算法层：各处理模块相互独立
+│       ├── deskew.py                   # 透视纠偏
+│       ├── auto_rotate.py              # 倾斜角度检测
+│       ├── rotate.py                   # 无黑边任意角度旋转
+│       ├── exposure.py                 # 曝光校正
+│       ├── enhance_sharpen.py          # 增强与锐化
+│       ├── wiener_deblur.py            # 维纳反卷积去运动模糊
+│       ├── filters.py                  # 空间域滤镜集合
+│       ├── watermark_remove.py         # 水印区域修复
+│       ├── background_remove.py        # 人像抠图
+│       ├── defocus_restore.py          # 失焦人脸修复（CodeFormer 封装，可选）
+│       └── ai_style.py                 # AI 风格化（SDXL-Turbo，可选）
 │
-└── .gitignore                     # Git 忽略规则文件（已自动忽略 node_modules、__pycache__ 等）
+├── colab_run_backend.ipynb             # 在 Colab GPU 上运行后端的辅助脚本
+├── test_img/                           # 测试图片
+└── .gitignore
 ```
 
 ---
 
-# 🚀 后端与算法环境配置 (Python)
+## 环境要求
 
-> 💡 **说明**：请确保已安装 Anaconda 或 Miniconda。
-
-## 1. 创建并激活虚拟环境
-
-在终端执行以下命令：
-
-```bash
-# 创建 Python 3.9 隔离环境
-conda create -n sustech-dip python=3.9 -y
-
-# 激活环境
-conda activate sustech-dip
-```
+- **Python** ≥ 3.9（建议使用 Conda 或 venv 创建隔离环境）
+- **Node.js** ≥ 18（建议搭配 npm）
+- 基础功能无需 GPU；AI 风格化与失焦恢复模块建议使用具备 ≥ 8 GB 显存的 NVIDIA GPU
 
 ---
 
-## 2. 安装核心算法依赖
+## 快速开始
 
-在激活了 `(sustech-dip)` 环境的终端中执行：
+前端与后端需分别启动，建议使用两个终端窗口。以下命令以项目根目录为起点。
+
+### 一、启动后端服务
+
+1. 创建并激活虚拟环境：
+
+   ```bash
+   conda create -n dip-project python=3.9 -y
+   conda activate dip-project
+   ```
+
+2. 安装基础依赖：
+
+   ```bash
+   cd image-processing-backend
+   pip install -r requirements.txt
+   ```
+
+3. 启动服务（监听 8766 端口，与前端默认地址一致）：
+
+   ```bash
+   python -m uvicorn main:app --host 127.0.0.1 --port 8766
+   ```
+
+   出现如下输出表示启动成功：
+
+   ```text
+   Uvicorn running on http://127.0.0.1:8766
+   ```
+
+> 注：`main.py` 直接运行（`python main.py`）时默认监听 8000 端口，与前端默认地址不一致。建议使用上述 `uvicorn ... --port 8766` 命令，或相应修改前端配置（见[配置说明](#配置说明)）。
+
+### 二、启动前端界面
+
+在另一个终端窗口中：
 
 ```bash
-# 进入后端目录
-cd image-processing-backend
-
-# 批量安装依赖
-pip install -r requirements.txt
-```
-
----
-
-## 3. 启动后端算法服务器
-
-确保终端路径处于 `image-processing-backend/` 目录下：
-
-```bash
-# 启动后端服务
-python main.py
-```
-
----
-
-# 💻 启动前端界面
-
-> 💡 **说明**：请确保已安装 Node.js。前端需在新终端窗口中操作，无需与 Conda 环境关联。
-
-```bash
-# 1. 进入前端目录
 cd image-corrector-ui
-
-# 2. 安装所有依赖包
 npm install
-
-# 3. 启动本地开发服务器
 npm run dev
 ```
 
-启动成功后，在浏览器中打开终端输出的地址（通常为 `http://localhost:5173/` 或 `http://localhost:5174/`）即可进入工作台。
+启动后在浏览器打开终端输出的地址（默认 `http://localhost:5173`）即可进入工作台。前端默认请求后端地址为 `http://127.0.0.1:8766/api`。
 
 ---
 
-# 🤖 可选：启用 AI 风格化滤镜（步骤 5）
+## 可选功能
 
-> 💡 **说明**：AI 滤镜提供 3 种针对人像/合照精调的风格（webtoon / 3d_cartoon / cyberpunk_anime），基于 `stabilityai/sdxl-turbo` image-to-image 模型，并自动检测人数与男女呈现以动态拼接 prompt。**强烈建议在装有 NVIDIA GPU（≥8GB VRAM）的机器上运行**；CPU 也能跑但单张 1-3 分钟。前 4 步无需此功能即可正常使用，可跳过本节。
+以下两个模块依赖额外的深度学习库与较大的预训练权重，按需安装即可，不影响其余功能。
 
-## 1. 安装匹配 CUDA 的 PyTorch
+### AI 风格化滤镜（SDXL-Turbo）
 
-请按 PyTorch 官网（https://pytorch.org/get-started/locally/）选择对应 CUDA 版本的安装命令。例如 CUDA 12.1：
+基于 `stabilityai/sdxl-turbo` 图生图模型，提供 3 种针对人像精调的风格，并通过 OpenCV 人脸检测与 CLIP 零样本分类自动估计人数与性别呈现，据此动态构造提示词。
 
-```bash
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
-```
+1. 按 [PyTorch 官网](https://pytorch.org/get-started/locally/) 安装与本机 CUDA 匹配的 PyTorch。以 CUDA 12.1 为例：
 
-## 2. 安装其余 AI 依赖
-
-```bash
-pip install -r requirements-ai.txt
-```
-
-## 3. 使用
-
-在前端界面"5. AI 滤镜"区域勾选启用，选择风格 → 调强度（0.30-0.90，越高越偏离原图）→ 点击"应用 AI 风格化"。
-
-**首次调用** `/api/ai-style` 时会从 HuggingFace 下载约 7GB 的 SDXL-Turbo 权重到本地缓存（`~/.cache/huggingface/`），后续启动复用缓存无需重复下载。
-
----
-
-# 🔍 可选：启用「失焦恢复」模块（CodeFormer 人脸修复）
-
-> 💡 **说明**：此模块基于腾讯 ARC 开源的 [CodeFormer](https://github.com/sczhou/CodeFormer)，针对模糊/低分辨率人脸做修复。`w` (fidelity weight) 控制画质 vs 保真的权衡，前端会对每个 `w` 各生成一张候选，让用户挑选满意的应用为新底图。**强烈建议 NVIDIA GPU**；CPU 也能跑但很慢。
-
-## 1. 把 CodeFormer 仓库 clone 到指定路径
-
-后端通过 subprocess 调用 CodeFormer 自带的 inference 脚本，需要先把它放到 `image-processing-backend/external/CodeFormer/`：
-
-```bash
-cd image-processing-backend
-mkdir -p external && cd external
-git clone https://github.com/sczhou/CodeFormer.git
-cd CodeFormer
-```
-
-## 2. 安装 CodeFormer 的依赖
-
-```bash
-# 装 CodeFormer 自家依赖
-pip install -r requirements.txt
-# 编译并安装 basicsr (CodeFormer 用的底层库)
-python basicsr/setup.py develop
-# 下载预训练权重(facelib + CodeFormer 主模型)
-python scripts/download_pretrained_models.py facelib
-python scripts/download_pretrained_models.py CodeFormer
-```
-
-> ⚠️ 如果遇到 `from torchvision.transforms.functional_tensor import rgb_to_grayscale` 报错，是因为新版 torchvision 把 `rgb_to_grayscale` 迁移了。手动把 `basicsr/data/degradations.py` 里那一行改成 `from torchvision.transforms.functional import rgb_to_grayscale`。
-
-## 3. 使用
-
-启动后端后，前端「7. 失焦恢复」面板可见。默认候选 `w = 0.3, 0.4, 0.5, 0.6`，可以自行修改成逗号分隔的若干 0~1 值。点击「生成候选」，等模型加载完成后会出现网格，点击任意候选即应用为当前底图。
-
-未安装 CodeFormer 时调用 `/api/defocus-restore` 会返回 503 + 安装指引；前端会把这段提示展示在面板里。
-
----
-
-# ☁️ 没有本地 GPU？把后端跑在 Colab 上
-
-如果本机没 NVIDIA GPU，但你想体验"AI 滤镜"，可以**只把后端跑在 Colab 的免费 T4 上**，前端继续本地跑。
-
-## 步骤
-
-1. 在 Colab (https://colab.research.google.com) 上传仓库根目录的 [`colab_run_backend.ipynb`](colab_run_backend.ipynb)
-2. `代码执行程序 → 更改运行时类型 → T4 GPU`
-3. 第 1 格把 `REPO_URL` 改成你的 GitHub 仓库地址，然后**全部运行**
-4. 第 3 格会打印一个 `https://xxx.trycloudflare.com` 公网地址
-5. 本地把这个地址写进 `image-corrector-ui/.env.local`（可参考 `.env.local.example`）：
-
+   ```bash
+   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
    ```
+
+2. 安装其余依赖：
+
+   ```bash
+   pip install -r requirements-ai.txt
+   ```
+
+3. 在前端「6. AI 滤镜」面板勾选启用，选择风格并调节强度（0.30–0.90，数值越大越偏离原图）后应用。
+
+> 首次调用 `/api/ai-style` 会从 HuggingFace 下载约 7 GB 的模型权重至本地缓存（`~/.cache/huggingface/`），之后复用缓存。CPU 亦可运行，但单张图通常需要 1–3 分钟。
+
+### 失焦人脸恢复（CodeFormer）
+
+基于腾讯 ARC 开源的 [CodeFormer](https://github.com/sczhou/CodeFormer)，对模糊或低分辨率人脸进行修复。保真权重 `w` 控制画质与保真之间的权衡：`w` 越小重建越激进、越清晰，`w` 越大越接近原貌。前端会对每个 `w` 各生成一张候选供选择。
+
+1. 将 CodeFormer 仓库克隆到指定路径（后端通过子进程调用其推理脚本）：
+
+   ```bash
+   cd image-processing-backend
+   mkdir -p external && cd external
+   git clone https://github.com/sczhou/CodeFormer.git
+   cd CodeFormer
+   ```
+
+2. 安装依赖并下载预训练权重：
+
+   ```bash
+   pip install -r requirements.txt
+   python basicsr/setup.py develop
+   python scripts/download_pretrained_models.py facelib
+   python scripts/download_pretrained_models.py CodeFormer
+   ```
+
+3. 启动后端后，前端「7. 失焦恢复」面板可用。默认候选权重为 `0.3, 0.4, 0.5, 0.6`，可自行修改为逗号分隔的若干 0–1 数值，生成候选后点击任意结果即应用为当前图像。
+
+> 若遇到 `from torchvision.transforms.functional_tensor import rgb_to_grayscale` 报错，是因为较新版本的 torchvision 已迁移该函数。将 `basicsr/data/degradations.py` 中对应导入改为 `from torchvision.transforms.functional import rgb_to_grayscale` 即可。
+>
+> 未安装 CodeFormer 时调用 `/api/defocus-restore` 会返回 503 与安装指引，前端会将该提示展示在面板中。
+
+### 将后端部署到 Colab（无本地 GPU 时）
+
+若本机没有 NVIDIA GPU，可仅将后端运行在 Colab 的免费 GPU 上，前端仍在本地运行：
+
+1. 将根目录的 `colab_run_backend.ipynb` 上传至 [Colab](https://colab.research.google.com)；
+2. 在「修改运行时类型」中选择 GPU；
+3. 将首个单元格中的 `REPO_URL` 改为本仓库地址后全部运行；
+4. 运行后会输出一个形如 `https://xxx.trycloudflare.com` 的公网地址；
+5. 将该地址写入 `image-corrector-ui/.env.local`：
+
+   ```text
    VITE_API_BASE_URL=https://xxx.trycloudflare.com/api
    ```
 
-6. 本地重启 `npm run dev`，刷新浏览器，所有处理请求就走 Colab GPU 了
+6. 重启前端 `npm run dev` 并刷新浏览器，处理请求即转由 Colab GPU 完成。
 
-> ⚠️ Colab 公网 URL 每次重启都会变，需重新更新 `.env.local`。Colab 免费版连续运行约 12 小时会自动断。
+> Colab 公网地址在每次重启后都会变化，需同步更新 `.env.local`；免费额度连续运行约 12 小时后会自动断开。
 
 ---
 
-# 本地启动前后端联动
+## REST API 接口
 
-下面命令适用于 Windows 本地开发，建议分别打开两个命令行窗口。
+所有接口均以 `/api` 为前缀，请求与响应主体为 JSON，图像字段为 Base64 编码的 PNG（带 `data:image/png;base64,` 前缀）。
 
-## 1. 启动后端
+| 方法 | 路径 | 功能 | 主要参数 |
+| :--- | :--- | :--- | :--- |
+| POST | `/api/deskew` | 透视纠偏 | `image` |
+| POST | `/api/rotate` | 无黑边任意角度旋转 | `image`, `angle` |
+| POST | `/api/auto-rotate` | 自动检测倾斜角并旋转 | `image` |
+| POST | `/api/mirror` | 镜像翻转 | `image`, `mirrorMode`（`horizontal`/`vertical`/`both`） |
+| POST | `/api/exposure` | 曝光校正 | `image`, `gamma`, `alpha`, `beta` |
+| POST | `/api/sharpen` | 增强与锐化 | `image`, `intensity`, `sharpenMode` |
+| POST | `/api/wiener-deblur` | 运动模糊维纳复原 | `image`, `wienerAuto`, `motionLength`, `motionAngle`, `noisePower` |
+| POST | `/api/filter` | 应用空间域滤镜 | `image`, `filterType`, `filterParams` |
+| POST | `/api/watermark-remove` | 水印区域修复 | `image`, `x`, `y`, `w`, `h`, `watermarkType`, `radius` |
+| POST | `/api/background-remove` | 人像抠图 | `image` |
+| GET  | `/api/defocus-restore/status` | 查询 CodeFormer 是否可用 | — |
+| POST | `/api/defocus-restore` | 失焦人脸恢复 | `image`, `defocusWeights`, `defocusUpscale` |
+| GET  | `/api/ai-style/list` | 获取可用风格列表 | — |
+| POST | `/api/ai-style` | AI 风格化 | `image`, `aiStyle`, `aiStrength`, `aiSeed` |
 
-```bat
-cd /d K:\桌面\图像\project\image-processing-backend
-set HF_HUB_DISABLE_XET=1
-python -m uvicorn main:app --host 127.0.0.1 --port 8766
-```
+服务启动后可访问 `http://127.0.0.1:8766/docs` 查看 FastAPI 自动生成的交互式接口文档。
 
-看到下面这行说明后端启动成功：
+---
+
+## 配置说明
+
+**后端端口**
+
+后端默认建议监听 `8766` 端口。如需更改，启动时调整 `--port` 参数，并同步更新前端的后端地址。
+
+**前端后端地址**
+
+前端在 `image-corrector-ui/src/App.vue` 中读取后端地址，优先使用环境变量 `VITE_API_BASE_URL`，默认值为 `http://127.0.0.1:8766/api`。可复制 `.env.local.example` 为 `.env.local` 并填写：
 
 ```text
-Uvicorn running on http://127.0.0.1:8766
+VITE_API_BASE_URL=http://127.0.0.1:8766/api
 ```
 
-如果提示 `address already in use` 或 `WinError 10048`，说明端口已经被占用。可以先查看占用进程：
+修改 `.env.local` 后需重启前端开发服务器使其生效。
+
+---
+
+## 常见问题
+
+**端口被占用（`address already in use` / `WinError 10048`）**
+
+查找占用端口的进程并结束（以 Windows 为例）：
 
 ```bat
 netstat -ano | findstr :8766
+taskkill /PID <对应的PID> /F
 ```
 
-然后结束对应 PID，例如 PID 是 `29456`：
+**前端无法连接后端**
 
-```bat
-taskkill /PID 29456 /F
+确认后端已启动，且前端 `VITE_API_BASE_URL`（或 `App.vue` 中默认值）与后端实际监听的地址、端口一致。
+
+**确认 PyTorch 与 GPU 是否可用**
+
+```bash
+python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 ```
 
-## 2. 启动前端
+**AI 模块首次调用较慢**
 
-另开一个命令行窗口：
+模型权重需先下载再加载到内存与显存，首次调用耗时较长属正常现象，后续调用会复用已加载的模型。
 
-```bat
-cd /d K:\桌面\图像\project\image-corrector-ui
-npm install
-npm run dev
-```
+---
 
-浏览器打开：
+## 开源致谢
 
-```text
-http://localhost:5173
-```
+本项目在实现过程中使用了以下开源模型与工具：
 
-前端默认请求后端地址为：
-
-```text
-http://127.0.0.1:8766/api
-```
-
-如果后端端口改了，需要同步修改 `image-corrector-ui/src/App.vue` 里的 `API_BASE_URL`，或者使用 `.env.local` 配置 `VITE_API_BASE_URL`。
-
-## 3. AI 滤镜说明
-
-AI 滤镜使用本地真实 SDXL-Turbo 模型。模型下载完成后仍需要加载到内存和显卡中，首次点击会比较慢。推荐 NVIDIA 独显，并确保 C 盘有足够可用空间或虚拟内存。
-
-检查 PyTorch 和显卡是否可用：
-
-```bat
-cd /d K:\桌面\图像\project\image-processing-backend
-python -c "import torch; print(torch.__version__, torch.cuda.is_available(), torch.cuda.get_device_name(0))"
-```
+- [SDXL-Turbo](https://huggingface.co/stabilityai/sdxl-turbo) — 图生图风格化
+- [CLIP](https://github.com/openai/CLIP) — 零样本图像分类
+- [CodeFormer](https://github.com/sczhou/CodeFormer) — 人脸修复
+- [rembg](https://github.com/danielgatis/rembg)（U²-Net） — 人像分割
+- [OpenCV](https://opencv.org/)、[FastAPI](https://fastapi.tiangolo.com/)、[Vue](https://vuejs.org/)
