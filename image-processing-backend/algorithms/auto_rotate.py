@@ -3,10 +3,6 @@ import numpy as np
 import math
 
 # 引入我们上一步写好的无黑边旋转函数
-
-# 注意：雷灿，不知道这个import会不会报错
-# 如果不行的话，麻烦把 rotate.py 里的 rotate_image_without_borders 函数复制过来放在这个文件里就行了
-# 总之这个要用到旋转功能的函数，必须要能访问rotate.py 里的 rotate_image_without_borders 函数
 from .rotate import rotate_image_without_borders 
 
 def auto_smart_deskew(image: np.ndarray) -> np.ndarray:
@@ -38,7 +34,6 @@ def auto_smart_deskew(image: np.ndarray) -> np.ndarray:
     return corrected_image
 
 def detect_skew_angle(image: np.ndarray) -> float:
-    #雷灿，这是辅助函数
     """
     智能检测图像的倾斜角度（基于霍夫直线变换）。
     
