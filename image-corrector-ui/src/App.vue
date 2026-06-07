@@ -571,7 +571,7 @@
       <div class="border rounded-xl p-4 bg-gray-50/50">
         <div class="flex justify-between items-center mb-3">
           <label class="font-semibold flex items-center gap-2">
-            <span class="text-sm">7.</span> 一键抠图
+            <span class="text-sm">8.</span> 一键抠图
           </label>
         </div>
         <div class="pt-2 border-t border-dashed space-y-3">
@@ -591,7 +591,7 @@
       <div class="border rounded-xl p-4 bg-gray-50/50" :class="{ 'border-red-500 bg-red-50/10': watermarkPanel.enabled }">
         <div class="flex justify-between items-center mb-3">
           <label class="font-semibold flex items-center gap-2">
-            <span class="text-sm">8.</span> 去除水印
+            <span class="text-sm">9.</span> 去除水印
           </label>
           <input type="checkbox" v-model="watermarkPanel.enabled" @change="onWatermarkToggle" :disabled="!currentImage" class="w-4 h-4 text-red-600" />
         </div>
@@ -616,7 +616,7 @@
       <div class="border rounded-xl p-4 bg-gray-50/50" :class="{ 'border-orange-500 bg-orange-50/10': brushPanel.enabled }">
         <div class="flex justify-between items-center mb-3">
           <label class="font-semibold flex items-center gap-2">
-            <span class="text-sm">9.</span> 涂抹打码 / 橡皮
+            <span class="text-sm">10.</span> 涂抹打码 / 橡皮
           </label>
           <input type="checkbox" v-model="brushPanel.enabled" @change="onBrushToggle" :disabled="!currentImage" class="w-4 h-4 text-orange-600" />
         </div>
